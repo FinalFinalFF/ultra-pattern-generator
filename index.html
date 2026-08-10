@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grid Pattern Generator</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <aside class="sidebar">
+        <h1>Grid Pattern Generator</h1>
+
+        <details class="section" open>
+          <summary>Pattern</summary>
+          <div class="section-body">
+            <label>Seed<input type="text" id="seed" value="pattern-2024" /></label>
+            <button type="button" id="randomizeBtn">Randomize</button>
+            <label>Columns<input type="number" id="cols" min="10" max="120" value="60" /></label>
+            <label>Rows<input type="number" id="rows" min="10" max="120" value="34" /></label>
+            <label>Cell size <span id="cellSizeVal">16</span>px
+              <input type="range" id="cellSize" min="4" max="32" value="16" />
+            </label>
+          </div>
+        </details>
+
+        <details class="section" open>
+          <summary>Shape Noise</summary>
+          <div class="section-body">
+            <label>Scale <span id="shapeScaleVal">0.045</span>
+              <input type="range" id="shapeScale" min="0.01" max="0.2" step="0.005" value="0.045" />
+            </label>
+            <label>Octaves <span id="shapeOctavesVal">2</span>
+              <input type="range" id="shapeOctaves" min="1" max="4" step="1" value="2" />
+            </label>
+            <label>Persistence <span id="shapePersistVal">0.35</span>
+              <input type="range" id="shapePersist" min="0.1" max="0.9" step="0.05" value="0.35" />
+            </label>
+            <label>Undulation speed <span id="undulationSpeedVal">0.06</span>
+              <input type="range" id="undulationSpeed" min="0" max="0.5" step="0.01" value="0.06" />
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="blobHalosEnabled" checked /> Blob halos
+            </label>
+            <label>Halo threshold <span id="haloThresholdVal">8</span>
+              <input type="range" id="haloThreshold" min="4" max="32" step="1" value="8" />
+            </label>
+          </div>
+        </details>
+
+        <details class="section">
+          <summary>Color Noise</summary>
+          <div class="section-body">
+            <label class="checkbox-label">
+              <input type="checkbox" id="colorNoiseEnabled" /> Enable color noise
+            </label>
+            <label>Scale <span id="colorScaleVal">0.04</span>
+              <input type="range" id="colorScale" min="0.01" max="0.2" step="0.005" value="0.04" />
+            </label>
+            <label>Octaves <span id="colorOctavesVal">2</span>
+              <input type="range" id="colorOctaves" min="1" max="4" step="1" value="2" />
+            </label>
+            <label>Persistence <span id="colorPersistVal">0.5</span>
+              <input type="range" id="colorPersist" min="0.1" max="0.9" step="0.05" value="0.5" />
+            </label>
+            <label>Seed offset <span id="colorOffsetVal">100</span>
+              <input type="range" id="colorOffset" min="0" max="500" step="10" value="100" />
+            </label>
+            <label>Color drift <span id="colorDriftVal">0.15</span>
+              <input type="range" id="colorDrift" min="0" max="0.5" step="0.01" value="0.15" />
+            </label>
+          </div>
+        </details>
+
+        <details class="section">
+          <summary>Cell Types</summary>
+          <div class="section-body" id="cellTypePanel"></div>
+        </details>
+
+        <details class="section">
+          <summary>Color Schemes</summary>
+          <div class="section-body" id="colorSchemePanel"></div>
+        </details>
+
+        <details class="section" open>
+          <summary>Export</summary>
+          <div class="section-body">
+            <button type="button" id="regenerateBtn">Regenerate</button>
+            <button type="button" id="downloadSvgBtn">Download SVG</button>
+            <label>Record duration
+              <select id="recordDuration">
+                <option value="3">3 seconds</option>
+                <option value="5" selected>5 seconds</option>
+                <option value="10">10 seconds</option>
+              </select>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="loopSeamlessly" checked /> Loop seamlessly
+            </label>
+            <button type="button" id="recordMp4Btn">Record MP4</button>
+            <div id="recordProgress" class="progress hidden">
+              <div class="progress-bar" id="progressBar"></div>
+              <span id="progressText"></span>
+            </div>
+          </div>
+        </details>
+      </aside>
+
+      <main class="preview-area">
+        <canvas id="preview"></canvas>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
