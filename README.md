@@ -1,4 +1,4 @@
-# Grid Pattern Generator
+# Ultra Pattern Generator
 
 Generate organic grid patterns that mix line meshes, dots, solid shapes, logos, outlines, and crosshatch — clustered by Simplex noise fields. Edit cell types, animate patterns, and export as SVG or MP4.
 
@@ -23,27 +23,8 @@ npm run preview    # serve production build locally
 
 ## Deploy to Netlify
 
-### 1. Initialize git and push to GitHub
-
-```bash
-cd ~/grid-pattern-generator
-git init
-git add -A
-git commit -m "Initial commit: grid pattern generator"
-gh repo create grid-pattern-generator --private --source=. --push
-```
-
-Or create a repo manually on GitHub, then:
-
-```bash
-git remote add origin git@github.com:YOUR_USER/grid-pattern-generator.git
-git push -u origin main
-```
-
-### 2. Connect Netlify
-
 1. In [Netlify](https://app.netlify.com/) → **Add new site** → **Import from Git**
-2. Select your GitHub repo
+2. Select [FinalFinalFF/ultra-pattern-generator](https://github.com/FinalFinalFF/ultra-pattern-generator)
 3. Build settings (auto-detected from `netlify.toml`):
    - Build command: `npm run build`
    - Publish directory: `dist`
