@@ -11,6 +11,7 @@ import {
   applyColorScheme,
   colorFieldSeedForState,
   isColorSchemeId,
+  isSeededScheme,
 } from './colorSchemes';
 import {
   filterPatternCellTypes,
@@ -23,7 +24,7 @@ import {
 } from './animation';
 
 const STORAGE_KEY = 'gridPatternState';
-const STATE_VERSION = 62;
+const STATE_VERSION = 64;
 
 const REMOVED_COLOR_SCHEME_MAP: Record<string, ColorSchemeId> = {
   'color-field': 'random',
@@ -360,10 +361,9 @@ function migrateState(parsed: Partial<AppState> & { stateVersion?: number }): Ap
       ? rawScheme
       : defaultState.colorSchemeId;
   const seed = parsed.seed ?? defaultState.seed;
-  const colorFieldSeed =
-    colorSchemeId === 'random'
-      ? parsed.colorFieldSeed ?? seed
-      : undefined;
+  const colorFieldSeed = isSeededScheme(colorSchemeId)
+    ? parsed.colorFieldSeed ?? seed
+    : undefined;
   cellTypes = applyColorScheme(
     cellTypes,
     colorSchemeId,

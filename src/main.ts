@@ -5,6 +5,7 @@ import {
   COLOR_SCHEMES,
   colorFieldSeedForState,
   getColorScheme,
+  isSeededScheme,
   resolvePaperColors,
   schemeSwatchStyle,
 } from './colorSchemes';
@@ -122,11 +123,15 @@ function buildRenderContext(time = 0, animation: AnimationParams = state.animati
 }
 
 function refreshColorFieldSwatch(): void {
-  const btn = document.querySelector<HTMLButtonElement>('[data-color-scheme="random"]');
-  const swatch = btn?.querySelector<HTMLElement>('.color-scheme-swatch');
-  if (!swatch) return;
-  const seed = activeColorFieldSeed();
-  swatch.style.background = schemeSwatchStyle(getColorScheme('random', seed));
+  for (const scheme of COLOR_SCHEMES) {
+    if (!isSeededScheme(scheme.id)) continue;
+    const btn = document.querySelector<HTMLButtonElement>(`[data-color-scheme="${scheme.id}"]`);
+    const swatch = btn?.querySelector<HTMLElement>('.color-scheme-swatch');
+    if (!swatch) continue;
+    // Only the active scheme tracks colorFieldSeed; others preview their default palette.
+    const seed = scheme.id === state.colorSchemeId ? activeColorFieldSeed() : undefined;
+    swatch.style.background = schemeSwatchStyle(getColorScheme(scheme.id, seed));
+  }
 }
 
 function applyActiveColorScheme(): void {
@@ -136,7 +141,7 @@ function applyActiveColorScheme(): void {
 }
 
 function schemeRerollsOnReselect(id: ColorSchemeId): boolean {
-  return id === 'random' || id === 'color-blocks';
+  return isSeededScheme(id) || id === 'color-blocks';
 }
 
 function setColorScheme(id: ColorSchemeId): void {

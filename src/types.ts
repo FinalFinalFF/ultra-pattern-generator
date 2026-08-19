@@ -100,7 +100,9 @@ export type ColorSchemeId =
   | 'red-light-on-dark'
   | 'pink-light-on-dark'
   | 'color-blocks'
-  | 'random';
+  | 'random'
+  | 'brand-random'
+  | 'brand-pure';
 
 export type Shape3dKind =
   | 'sphere'
