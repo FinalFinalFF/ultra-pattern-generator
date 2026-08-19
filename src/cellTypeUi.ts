@@ -1,22 +1,59 @@
 import {
   createDefaultCellType,
   getDefaultCellTypes,
-  normalizeWeights,
-  redistributeWeights,
+  hasEditableDensity,
+  isNoiseBulkType,
+  normalizeBulkDensities,
+  redistributeDensities,
   reindexOrders,
 } from './cellTypes';
+import { applyColorScheme, colorFieldSeedForState } from './colorSchemes';
 import { renderCellPreview } from './renderCanvas';
 import { loadSvgIntoCache, parseSvgUpload, warnIfStorageLarge } from './svgSymbols';
 import type { AppState, CellTypeDef } from './types';
+import { TYPE_IDS } from './types';
 
 type OnChange = () => void;
+
+const TYPE_DESCRIPTIONS: Record<string, string> = {
+  [TYPE_IDS.grid]: 'Density — mesh cells in bulk regions (normalized with dot/hexagon/solid)',
+  [TYPE_IDS.dot]: 'Density — filled circles in bulk regions',
+  [TYPE_IDS.hexagon]: 'Density — filled hexagons in bulk regions',
+  [TYPE_IDS.solid]: 'Density — filled squares in bulk regions',
+  [TYPE_IDS.logo]: 'Density — border line where regions meet',
+  [TYPE_IDS.outline]: 'Density — outline band at region borders',
+  [TYPE_IDS.crosshatch]: 'Density — crosshatch band at region borders',
+  [TYPE_IDS.empty]: 'Density — empty void blobs in the noise field',
+};
+
+function typeDescription(type: CellTypeDef): string {
+  return TYPE_DESCRIPTIONS[type.id] ?? 'Custom cell type';
+}
+
+function densityMinForType(id: string): number {
+  return isNoiseBulkType(id) ? 0.01 : 0;
+}
+
+function applyDensityChange(
+  getState: () => AppState,
+  setState: (s: AppState) => void,
+  id: string,
+  density: number,
+): void {
+  const s = getState();
+  const updated = s.cellTypes.map((t) => (t.id === id ? { ...t, density } : t));
+  setState({
+    ...s,
+    cellTypes: isNoiseBulkType(id) ? normalizeBulkDensities(updated) : updated,
+  });
+}
 
 export function initCellTypeUi(
   container: HTMLElement,
   getState: () => AppState,
   setState: (s: AppState) => void,
   onChange: OnChange,
-): void {
+): { refresh: () => void } {
   container.innerHTML = `
     <div class="panel-actions">
       <button type="button" id="addCellType">+ Add Type</button>
@@ -30,9 +67,10 @@ export function initCellTypeUi(
     const state = getState();
     const order = state.cellTypes.length;
     const newType = createDefaultCellType(order);
+    const cellTypes = normalizeBulkDensities([...state.cellTypes, newType]);
     setState({
       ...state,
-      cellTypes: normalizeWeights([...state.cellTypes, newType]),
+      cellTypes,
     });
     onChange();
     renderList(container, getState, setState, onChange, newType.id);
@@ -40,12 +78,49 @@ export function initCellTypeUi(
 
   container.querySelector('#resetCellTypes')!.addEventListener('click', () => {
     if (!confirm('Reset cell types to defaults?')) return;
-    setState({ ...getState(), cellTypes: getDefaultCellTypes() });
+    const s = getState();
+    const cellTypes = applyColorScheme(
+      getDefaultCellTypes(),
+      s.colorSchemeId,
+      colorFieldSeedForState(s.colorSchemeId, s.seed, s.colorFieldSeed),
+    );
+    setState({
+      ...s,
+      cellTypes,
+    });
     onChange();
     renderList(container, getState, setState, onChange);
   });
 
   renderList(container, getState, setState, onChange);
+  return {
+    refresh: () => renderList(container, getState, setState, onChange),
+  };
+}
+
+function renderTypeRow(type: CellTypeDef, idx: number, total: number): string {
+  const desc = typeDescription(type);
+  const editable = hasEditableDensity(type);
+  const min = densityMinForType(type.id);
+  const densityControl = editable
+    ? `<label class="item-density-wrap" title="Density">
+        <input type="range" class="item-density" data-density="${type.id}" min="${min}" max="1" step="0.01" value="${type.density}"/>
+        <span class="item-density-val">${Math.round(type.density * 100)}%</span>
+      </label>`
+    : '<span class="item-density-val muted">—</span>';
+
+  return `
+    <div class="item-row" data-id="${type.id}">
+      <span class="drag-handle" title="Reorder">☰</span>
+      <canvas class="item-preview" width="32" height="32" data-preview="${type.id}"></canvas>
+      <label class="item-enable"><input type="checkbox" data-enable="${type.id}" ${type.enabled ? 'checked' : ''}/></label>
+      <span class="item-name" title="${desc}">${type.name}</span>
+      ${densityControl}
+      <button type="button" class="icon-btn" data-edit="${type.id}">Edit</button>
+      <button type="button" class="icon-btn" data-up="${type.id}" ${idx === 0 ? 'disabled' : ''}>↑</button>
+      <button type="button" class="icon-btn" data-down="${type.id}" ${idx === total - 1 ? 'disabled' : ''}>↓</button>
+      <button type="button" class="icon-btn danger" data-delete="${type.id}">×</button>
+    </div>`;
 }
 
 function renderList(
@@ -59,37 +134,38 @@ function renderList(
   const state = getState();
   const types = [...state.cellTypes].sort((a, b) => a.order - b.order);
 
-  list.innerHTML = types
-    .map(
-      (t, idx) => `
-    <div class="item-row" data-id="${t.id}">
-      <span class="drag-handle" title="Reorder">☰</span>
-      <canvas class="item-preview" width="32" height="32" data-preview="${t.id}"></canvas>
-      <label class="item-enable"><input type="checkbox" data-enable="${t.id}" ${t.enabled ? 'checked' : ''}/></label>
-      <span class="item-name">${t.name}${t.noiseAssigned === false ? ' <span class="auto-badge">auto</span>' : ''}</span>
-      <span class="item-weight">${t.noiseAssigned === false ? '—' : `${Math.round(t.weight * 100)}%`}</span>
-      <button type="button" class="icon-btn" data-edit="${t.id}">Edit</button>
-      <button type="button" class="icon-btn" data-up="${t.id}" ${idx === 0 ? 'disabled' : ''}>↑</button>
-      <button type="button" class="icon-btn" data-down="${t.id}" ${idx === types.length - 1 ? 'disabled' : ''}>↓</button>
-      <button type="button" class="icon-btn danger" data-delete="${t.id}">×</button>
-    </div>`,
-    )
-    .join('');
+  list.innerHTML = `
+    <div class="type-section-header">Cell types</div>
+    ${types.map((t, idx) => renderTypeRow(t, idx, types.length)).join('')}
+  `;
 
   types.forEach((t) => {
     const preview = list.querySelector(`[data-preview="${t.id}"]`) as HTMLCanvasElement;
     if (preview) renderCellPreview(preview, t);
   });
 
+  list.querySelectorAll('[data-density]').forEach((el) => {
+    el.addEventListener('input', (e) => {
+      const id = (e.target as HTMLInputElement).dataset.density!;
+      const density = parseFloat((e.target as HTMLInputElement).value);
+      const row = list.querySelector(`[data-id="${id}"]`);
+      const valEl = row?.querySelector('.item-density-val');
+      if (valEl) valEl.textContent = `${Math.round(density * 100)}%`;
+      applyDensityChange(getState, setState, id, density);
+      onChange();
+    });
+  });
+
   list.querySelectorAll('[data-enable]').forEach((el) => {
     el.addEventListener('change', (e) => {
       const id = (e.target as HTMLInputElement).dataset.enable!;
       const s = getState();
+      const updated = s.cellTypes.map((t) =>
+        t.id === id ? { ...t, enabled: (e.target as HTMLInputElement).checked } : t,
+      );
       setState({
         ...s,
-        cellTypes: normalizeWeights(
-          s.cellTypes.map((t) => (t.id === id ? { ...t, enabled: (e.target as HTMLInputElement).checked } : t)),
-        ),
+        cellTypes: isNoiseBulkType(id) ? normalizeBulkDensities(updated) : updated,
       });
       onChange();
       renderList(container, getState, setState, onChange);
@@ -108,7 +184,11 @@ function renderList(
       const s = getState();
       if (s.cellTypes.length <= 1) return;
       if (!confirm('Delete this cell type?')) return;
-      setState({ ...s, cellTypes: redistributeWeights(s.cellTypes, id) });
+      const cellTypes = redistributeDensities(s.cellTypes, id);
+      setState({
+        ...s,
+        cellTypes,
+      });
       onChange();
       renderList(container, getState, setState, onChange);
     });
@@ -157,24 +237,35 @@ function renderEditor(
   const type = getState().cellTypes.find((t) => t.id === id);
   if (!type) return;
 
+  const editable = hasEditableDensity(type);
+  const min = densityMinForType(type.id);
+  const showBorderDepth =
+    type.id === TYPE_IDS.crosshatch || type.id === TYPE_IDS.outline;
+  const borderDepth = type.borderDepth ?? (type.id === TYPE_IDS.crosshatch ? 2 : 1);
+  const borderDepthMax = type.id === TYPE_IDS.crosshatch ? 4 : 3;
+  const borderDepthMin = type.id === TYPE_IDS.crosshatch ? 1 : 0;
+
   editor.classList.remove('hidden');
   editor.innerHTML = `
     <h4>Edit: ${type.name}</h4>
     <label>Name<input type="text" id="editName" value="${type.name}"/></label>
     <label>Mode
       <select id="editMode">
-        ${['none', 'mesh', 'fill', 'stroke', 'circle', 'crosshatch', 'diagonal', 'svg'].map((m) => `<option value="${m}" ${type.mode === m ? 'selected' : ''}>${m}</option>`).join('')}
+        ${['none', 'mesh', 'fill', 'stroke', 'circle', 'hexagon', 'crosshatch', 'svg'].map((m) => `<option value="${m}" ${type.mode === m ? 'selected' : ''}>${m}</option>`).join('')}
       </select>
     </label>
-    <label>Shape weight <span id="weightVal">${Math.round(type.weight * 100)}%</span>
-      <input type="range" id="editWeight" min="0.01" max="1" step="0.01" value="${type.weight}" ${type.noiseAssigned === false ? 'disabled' : ''}/>
+    <label>Density <span id="densityVal">${Math.round(type.density * 100)}%</span>
+      <input type="range" id="editDensity" min="${min}" max="1" step="0.01" value="${type.density}" ${editable ? '' : 'disabled'}/>
     </label>
+    ${showBorderDepth ? `<label>Border depth <span id="borderDepthVal">${borderDepth}</span>
+      <input type="range" id="editBorderDepth" min="${borderDepthMin}" max="${borderDepthMax}" step="1" value="${borderDepth}"/>
+    </label>` : ''}
     <label>Fill color<input type="color" id="editFill" value="${type.fill}"/></label>
     <label>Stroke color<input type="color" id="editStroke" value="${type.stroke}"/></label>
     <label>Stroke width<input type="number" id="editStrokeWidth" min="0.5" max="8" step="0.5" value="${type.strokeWidth}"/></label>
     <label>Color application
       <select id="editColorApp">
-        ${['fill', 'stroke', 'both', 'accent'].map((m) => `<option value="${m}" ${type.colorApplication === m ? 'selected' : ''}>${m}</option>`).join('')}
+        ${['fill', 'stroke', 'both'].map((m) => `<option value="${m}" ${type.colorApplication === m ? 'selected' : ''}>${m}</option>`).join('')}
       </select>
     </label>
     <label>Circle radius<input type="range" id="editCircleR" min="0.1" max="0.49" step="0.01" value="${type.circleRadius}"/></label>
@@ -206,18 +297,18 @@ function renderEditor(
     editor.querySelector('#svgUploadSection')!.classList.toggle('hidden', mode !== 'svg');
     update({ mode });
   });
-  editor.querySelector('#editWeight')!.addEventListener('input', (e) => {
-    const weight = parseFloat((e.target as HTMLInputElement).value);
-    (editor.querySelector('#weightVal') as HTMLElement).textContent = `${Math.round(weight * 100)}%`;
-    const s = getState();
-    setState({
-      ...s,
-      cellTypes: normalizeWeights(
-        s.cellTypes.map((t) => (t.id === id ? { ...t, weight } : t)),
-      ),
-    });
+  editor.querySelector('#editDensity')!.addEventListener('input', (e) => {
+    const density = parseFloat((e.target as HTMLInputElement).value);
+    (editor.querySelector('#densityVal') as HTMLElement).textContent = `${Math.round(density * 100)}%`;
+    applyDensityChange(getState, setState, id, density);
     onChange();
     renderList(container, getState, setState, onChange, id);
+  });
+  const borderDepthEl = editor.querySelector('#editBorderDepth') as HTMLInputElement | null;
+  borderDepthEl?.addEventListener('input', (e) => {
+    const borderDepth = Math.round(parseFloat((e.target as HTMLInputElement).value));
+    (editor.querySelector('#borderDepthVal') as HTMLElement).textContent = String(borderDepth);
+    update({ borderDepth });
   });
   editor.querySelector('#editFill')!.addEventListener('input', (e) =>
     update({ fill: (e.target as HTMLInputElement).value }),
@@ -250,7 +341,7 @@ function renderEditor(
       await loadSvgIntoCache(symbolId, dataUrl);
       warnIfStorageLarge(getState().cellTypes);
       onChange();
-    } catch (err) {
+    } catch {
       alert('Failed to parse SVG');
     }
   });

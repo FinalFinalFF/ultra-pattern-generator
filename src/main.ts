@@ -1,65 +1,276 @@
 import { initCellTypeUi } from './cellTypeUi';
-import { initColorSchemeUi } from './colorSchemeUi';
+import { colorBlocksForScheme, colorBlocksLayoutSeed, usesColorBlocks } from './colorBlocks';
+import {
+  applyColorScheme,
+  COLOR_SCHEMES,
+  colorFieldSeedForState,
+  getColorScheme,
+  resolvePaperColors,
+  schemeSwatchStyle,
+} from './colorSchemes';
+import { getColorBlocksPhase, type ExportFrameSpec } from './animation';
 import { recordMp4, recordMp4Fallback } from './export';
 import { generateGrid } from './generate';
-import { renderToCanvas } from './renderCanvas';
-import { downloadSvg } from './renderSvg';
-import { getActiveScheme, loadState, saveState } from './state';
-import { getSvgCache, preloadTypeSvgs } from './svgSymbols';
-import type { AppState, GridCell, RenderContext } from './types';
+import { renderToSvg, downloadSvg, rasterizeContextToCanvas } from './renderCanvas';
+import { defaultShape3dForKind, measureHitRate, SHAPES3D_COLS, SHAPES3D_ROWS } from './shapes3d';
+import { initShape3dDragRotate } from './shape3dDrag';
+import { resolveShape3dMapping } from './shapes3dMapping';
+import { defaultShape3d, loadState, resetToDefaultState, saveState } from './state';
+import { preloadTypeSvgs } from './svgSymbols';
+import type {
+  AnimationParams,
+  AppState,
+  ColorSchemeId,
+  GenerateMode,
+  GridCell,
+  RenderContext,
+  Shape3dKind,
+} from './types';
 
 let state: AppState = loadState();
 let grid: GridCell[][] = [];
 let smoothedTime = 0;
 let animationId: number | null = null;
+let exportInProgress = false;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let refreshCellTypeUi: () => void = () => {};
 
-const canvas = document.getElementById('preview') as HTMLCanvasElement;
+const preview = document.getElementById('preview') as HTMLElement;
+const recordCanvas = document.getElementById('recordCanvas') as HTMLCanvasElement;
 
 function debouncedRender(): void {
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
-    render(smoothedTime);
+    render();
     saveState(state);
   }, 50);
 }
 
-function buildGeneratorContext(time: number) {
+function renderDims(): { cols: number; rows: number } {
+  if (state.generateMode === 'shapes3d') {
+    return { cols: SHAPES3D_COLS, rows: SHAPES3D_ROWS };
+  }
+  return { cols: state.cols, rows: state.rows };
+}
+
+function buildGeneratorContext(time: number, animation: AnimationParams = state.animation) {
   return {
     seed: state.seed,
     cols: state.cols,
     rows: state.rows,
+    generateMode: state.generateMode,
     cellTypes: state.cellTypes,
     shapeNoise: state.shapeNoise,
-    colorNoise: state.colorNoise,
-    animation: state.animation,
-    adjacency: state.adjacency,
-    activeScheme: getActiveScheme(state),
+    shape3d: state.shape3d,
+    animation,
     time,
   };
 }
 
-function buildRenderContext(): RenderContext {
-  const scheme = getActiveScheme(state);
+function activeColorFieldSeed(): string | undefined {
+  return colorFieldSeedForState(state.colorSchemeId, state.seed, state.colorFieldSeed);
+}
+
+function bumpColorFieldSeed(): void {
+  state.colorFieldSeed = `cf-${Date.now()}`;
+}
+
+function shouldAnimatePattern(): boolean {
+  return (
+    state.generateMode === 'pattern' &&
+    state.animation.enabled &&
+    state.animation.speed > 0
+  );
+}
+
+function shouldAnimateColorBlocks(): boolean {
+  return (
+    usesColorBlocks(state.colorSchemeId) &&
+    state.animation.animateColorBlocks &&
+    state.animation.speed > 0
+  );
+}
+
+function shouldRunPreviewAnimation(): boolean {
+  if (exportInProgress) return false;
+  return shouldAnimatePattern() || shouldAnimateColorBlocks();
+}
+
+function buildRenderContext(time = 0, animation: AnimationParams = state.animation): RenderContext {
+  const { cols, rows } = renderDims();
+  const paletteSeed = activeColorFieldSeed();
+  const { paper, surface } = resolvePaperColors(state.colorSchemeId, paletteSeed);
+  const blockPhase = getColorBlocksPhase(time, animation);
   return {
     grid,
     cellTypes: state.cellTypes,
-    activeScheme: scheme,
-    colorNoiseEnabled: state.colorNoise.enabled,
     cellSize: state.cellSize,
-    cols: state.cols,
-    rows: state.rows,
+    cols,
+    rows,
+    paper,
+    surface,
+    colorSchemeId: state.colorSchemeId,
+    generateMode: state.generateMode,
+    colorBlocks: colorBlocksForScheme(
+      state.colorSchemeId,
+      colorBlocksLayoutSeed(state.colorSchemeId, state.seed, state.colorFieldSeed),
+      cols,
+      rows,
+      blockPhase,
+    ),
   };
 }
 
-function render(time = smoothedTime): void {
-  grid = generateGrid(buildGeneratorContext(time));
-  renderToCanvas(canvas, buildRenderContext(), getSvgCache());
+function refreshColorFieldSwatch(): void {
+  const btn = document.querySelector<HTMLButtonElement>('[data-color-scheme="random"]');
+  const swatch = btn?.querySelector<HTMLElement>('.color-scheme-swatch');
+  if (!swatch) return;
+  const seed = activeColorFieldSeed();
+  swatch.style.background = schemeSwatchStyle(getColorScheme('random', seed));
 }
 
-function renderFrame(time: number): void {
-  grid = generateGrid(buildGeneratorContext(time));
-  renderToCanvas(canvas, buildRenderContext(), getSvgCache());
+function applyActiveColorScheme(): void {
+  state.cellTypes = applyColorScheme(state.cellTypes, state.colorSchemeId, activeColorFieldSeed());
+  refreshColorFieldSwatch();
+  refreshCellTypeUi();
+}
+
+function schemeRerollsOnReselect(id: ColorSchemeId): boolean {
+  return id === 'random' || id === 'color-blocks';
+}
+
+function setColorScheme(id: ColorSchemeId): void {
+  if (state.colorSchemeId === id) {
+    if (schemeRerollsOnReselect(id)) {
+      bumpColorFieldSeed();
+      applyActiveColorScheme();
+      debouncedRender();
+    }
+    return;
+  }
+  state.colorSchemeId = id;
+  if (schemeRerollsOnReselect(id)) bumpColorFieldSeed();
+  else state.colorFieldSeed = undefined;
+  applyActiveColorScheme();
+  syncColorSchemeUi();
+  updateAnimationControls();
+  debouncedRender();
+}
+
+function syncColorSchemeUi(): void {
+  document.querySelectorAll<HTMLButtonElement>('[data-color-scheme]').forEach((btn) => {
+    const id = btn.dataset.colorScheme as ColorSchemeId;
+    const active = id === state.colorSchemeId;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
+function initColorSchemeControls(): void {
+  const grid = document.getElementById('colorSchemeGrid')!;
+  grid.innerHTML = COLOR_SCHEMES.map(
+    (scheme) => `
+      <button
+        type="button"
+        class="color-scheme-btn"
+        data-color-scheme="${scheme.id}"
+        title="${scheme.name}"
+        aria-label="${scheme.name}"
+        aria-pressed="false"
+      >
+        <span class="color-scheme-swatch" style="background:${schemeSwatchStyle(scheme)}"></span>
+        <span class="color-scheme-label">${scheme.name}</span>
+      </button>`,
+  ).join('');
+
+  grid.querySelectorAll<HTMLButtonElement>('[data-color-scheme]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setColorScheme(btn.dataset.colorScheme as ColorSchemeId);
+    });
+  });
+  syncColorSchemeUi();
+}
+
+function needsGridRegeneration(): boolean {
+  if (shouldAnimatePattern()) return true;
+  const { cols, rows } = renderDims();
+  if (grid.length !== rows || (grid[0]?.length ?? 0) !== cols) return true;
+  if (!shouldRunPreviewAnimation()) return true;
+  return false;
+}
+
+function render(time = shouldRunPreviewAnimation() ? smoothedTime : 0, forceGrid = false): void {
+  if (forceGrid || needsGridRegeneration()) {
+    grid = generateGrid(buildGeneratorContext(time));
+  }
+  renderToSvg(preview, buildRenderContext(time));
+}
+
+async function renderExportFrame(spec: ExportFrameSpec, animation: AnimationParams): Promise<void> {
+  const exportGrid = generateGrid(buildGeneratorContext(spec.time, animation));
+  const ctx: RenderContext = { ...buildRenderContext(spec.time, animation), grid: exportGrid };
+  await rasterizeContextToCanvas(recordCanvas, ctx);
+}
+
+function parseRecordDurationSec(): number {
+  return parseInt((document.getElementById('recordDuration') as HTMLSelectElement).value, 10);
+}
+
+function setAnimationLoopLength(loopLengthSec: number): void {
+  state.animation = { ...state.animation, loopLengthSec };
+}
+
+function exportAnimationParams(): AnimationParams {
+  const animation = { ...state.animation };
+  const colorBlocksAnim =
+    usesColorBlocks(state.colorSchemeId) && animation.animateColorBlocks;
+  if (!animation.enabled && !colorBlocksAnim && state.generateMode === 'pattern') {
+    animation.enabled = true;
+  }
+  return animation;
+}
+
+function updateModeControls(): void {
+  const mode = state.generateMode;
+  const is3d = mode === 'shapes3d';
+  const isGradient = mode === 'gradient';
+  document.getElementById('modePattern')!.classList.toggle('active', mode === 'pattern');
+  document.getElementById('modeShapes3d')!.classList.toggle('active', is3d);
+  document.getElementById('modeGradient')!.classList.toggle('active', isGradient);
+
+  document.querySelectorAll('.pattern-only-control').forEach((el) => {
+    el.classList.toggle('hidden', is3d);
+  });
+  document.querySelectorAll('.shapes3d-only').forEach((el) => {
+    el.classList.toggle('hidden', !is3d);
+  });
+  preview.classList.toggle('preview-3d-orbit', is3d);
+  if (is3d) preview.title = 'Drag to rotate';
+  else preview.removeAttribute('title');
+}
+
+function syncShape3dUi(): void {
+  const s = state.shape3d;
+  (document.getElementById('shape3dKind') as HTMLSelectElement).value = s.kind;
+  syncRange('shape3dPosX', 'shape3dPosXVal', s.position.x, (v) => v.toFixed(2));
+  syncRange('shape3dPosY', 'shape3dPosYVal', s.position.y, (v) => v.toFixed(2));
+  syncRange('shape3dPosZ', 'shape3dPosZVal', s.position.z, (v) => v.toFixed(2));
+  syncRange('shape3dScale', 'shape3dScaleVal', s.scale, (v) => v.toFixed(2));
+  syncRange('shape3dRotX', 'shape3dRotXVal', s.rotationX, (v) => String(Math.round(v)));
+  syncRange('shape3dRotY', 'shape3dRotYVal', s.rotationY, (v) => String(Math.round(v)));
+}
+
+function updateAnimationControls(): void {
+  const patternAnim = state.animation.enabled;
+  const colorBlocksAnim =
+    usesColorBlocks(state.colorSchemeId) && state.animation.animateColorBlocks;
+  const animDisabled = !patternAnim && !colorBlocksAnim;
+  (document.getElementById('loopLength') as HTMLSelectElement).disabled = animDisabled;
+  (document.getElementById('animationSpeed') as HTMLInputElement).disabled = animDisabled;
+
+  document.querySelectorAll('.color-blocks-animation-control').forEach((el) => {
+    el.classList.toggle('hidden', !usesColorBlocks(state.colorSchemeId));
+  });
 }
 
 function startAnimationLoop(): void {
@@ -68,7 +279,7 @@ function startAnimationLoop(): void {
   const tick = (now: number) => {
     const rawDt = Math.min((now - last) / 1000, 0.033);
     last = now;
-    if (state.animation.speed > 0) {
+    if (shouldRunPreviewAnimation()) {
       smoothedTime += rawDt;
       render(smoothedTime);
     }
@@ -96,18 +307,110 @@ function bindRange(
   });
 }
 
+function syncRange(
+  id: string,
+  valId: string,
+  value: number,
+  format: (v: number) => string = String,
+): void {
+  const input = document.getElementById(id) as HTMLInputElement | null;
+  const label = document.getElementById(valId);
+  if (!input || !label) return;
+  input.value = String(value);
+  label.textContent = format(value);
+}
+
 function syncUiFromState(): void {
   (document.getElementById('seed') as HTMLInputElement).value = state.seed;
-  (document.getElementById('cols') as HTMLInputElement).value = String(state.cols);
-  (document.getElementById('rows') as HTMLInputElement).value = String(state.rows);
-  (document.getElementById('cellSize') as HTMLInputElement).value = String(state.cellSize);
-  (document.getElementById('cellSizeVal')!).textContent = String(state.cellSize);
-  (document.getElementById('colorNoiseEnabled') as HTMLInputElement).checked = state.colorNoise.enabled;
+  syncRange('cols', 'colsVal', state.cols);
+  syncRange('rows', 'rowsVal', state.rows);
+  syncRange('cellSize', 'cellSizeVal', state.cellSize);
+  syncShape3dUi();
+  syncColorSchemeUi();
+  refreshColorFieldSwatch();
+
+  (document.getElementById('animationEnabled') as HTMLInputElement).checked = state.animation.enabled;
+  (document.getElementById('animateColorBlocks') as HTMLInputElement).checked =
+    state.animation.animateColorBlocks;
+  (document.getElementById('loopLength') as HTMLSelectElement).value = String(state.animation.loopLengthSec);
+  syncRange('animationSpeed', 'animationSpeedVal', state.animation.speed, (v) => v.toFixed(2));
+
   (document.getElementById('loopSeamlessly') as HTMLInputElement).checked = state.loopSeamlessly;
-  (document.getElementById('blobHalosEnabled') as HTMLInputElement).checked = state.adjacency.blobHalosEnabled;
+  updateModeControls();
+  updateAnimationControls();
+}
+
+async function resetAllToDefaults(): Promise<void> {
+  if (!confirm('Reset all settings to defaults? This cannot be undone.')) return;
+  state = resetToDefaultState();
+  smoothedTime = 0;
+  syncUiFromState();
+  refreshCellTypeUi();
+  await preloadTypeSvgs(state.cellTypes);
+  render(0);
+}
+
+function setGenerateMode(mode: GenerateMode): void {
+  if (state.generateMode === mode) return;
+  state.generateMode = mode;
+  updateModeControls();
+  if (mode === 'shapes3d' && import.meta.env.DEV) {
+    const rate = measureHitRate(
+      state.seed,
+      state.shape3d,
+      resolveShape3dMapping(state.cellTypes),
+    );
+    if (rate < 0.05) {
+      console.warn(`3D shapes: very low hit rate (${(rate * 100).toFixed(1)}%) for seed "${state.seed}"`);
+    }
+  }
+  debouncedRender();
+}
+
+function patchShape3d(patch: Partial<AppState['shape3d']>): void {
+  state.shape3d = { ...state.shape3d, ...patch };
+}
+
+function initShape3dControls(): void {
+  document.getElementById('shape3dKind')!.addEventListener('change', (e) => {
+    const kind = (e.target as HTMLSelectElement).value as Shape3dKind;
+    state.shape3d = defaultShape3dForKind(kind);
+    syncShape3dUi();
+    debouncedRender();
+  });
+
+  bindRange('shape3dPosX', 'shape3dPosXVal', () => state.shape3d.position.x, (v) => {
+    state.shape3d = { ...state.shape3d, position: { ...state.shape3d.position, x: v } };
+  }, (v) => v.toFixed(2));
+
+  bindRange('shape3dPosY', 'shape3dPosYVal', () => state.shape3d.position.y, (v) => {
+    state.shape3d = { ...state.shape3d, position: { ...state.shape3d.position, y: v } };
+  }, (v) => v.toFixed(2));
+
+  bindRange('shape3dPosZ', 'shape3dPosZVal', () => state.shape3d.position.z, (v) => {
+    state.shape3d = { ...state.shape3d, position: { ...state.shape3d.position, z: v } };
+  }, (v) => v.toFixed(2));
+
+  bindRange('shape3dScale', 'shape3dScaleVal', () => state.shape3d.scale, (v) => {
+    patchShape3d({ scale: v });
+  }, (v) => v.toFixed(2));
+
+  bindRange('shape3dRotX', 'shape3dRotXVal', () => state.shape3d.rotationX, (v) => {
+    patchShape3d({ rotationX: v });
+  }, (v) => String(Math.round(v)));
+
+  bindRange('shape3dRotY', 'shape3dRotYVal', () => state.shape3d.rotationY, (v) => {
+    patchShape3d({ rotationY: v });
+  }, (v) => String(Math.round(v)));
 }
 
 function initControls(): void {
+  initColorSchemeControls();
+
+  document.getElementById('modePattern')!.addEventListener('click', () => setGenerateMode('pattern'));
+  document.getElementById('modeShapes3d')!.addEventListener('click', () => setGenerateMode('shapes3d'));
+  document.getElementById('modeGradient')!.addEventListener('click', () => setGenerateMode('gradient'));
+
   document.getElementById('seed')!.addEventListener('input', (e) => {
     state.seed = (e.target as HTMLInputElement).value;
     debouncedRender();
@@ -116,56 +419,86 @@ function initControls(): void {
   document.getElementById('randomizeBtn')!.addEventListener('click', () => {
     state.seed = `pattern-${Date.now()}`;
     (document.getElementById('seed') as HTMLInputElement).value = state.seed;
+    if (schemeRerollsOnReselect(state.colorSchemeId)) {
+      bumpColorFieldSeed();
+      applyActiveColorScheme();
+    }
     debouncedRender();
   });
 
-  document.getElementById('cols')!.addEventListener('change', (e) => {
-    state.cols = Math.min(120, Math.max(10, parseInt((e.target as HTMLInputElement).value, 10) || 60));
-    debouncedRender();
+  document.getElementById('resetAllDefaults')!.addEventListener('click', () => {
+    void resetAllToDefaults();
   });
 
-  document.getElementById('rows')!.addEventListener('change', (e) => {
-    state.rows = Math.min(120, Math.max(10, parseInt((e.target as HTMLInputElement).value, 10) || 34));
-    debouncedRender();
+  bindRange('cols', 'colsVal', () => state.cols, (v) => {
+    state.cols = Math.round(v);
   });
-
+  bindRange('rows', 'rowsVal', () => state.rows, (v) => {
+    state.rows = Math.round(v);
+  });
   bindRange('cellSize', 'cellSizeVal', () => state.cellSize, (v) => { state.cellSize = v; });
 
-  bindRange('shapeScale', 'shapeScaleVal', () => state.shapeNoise.scale, (v) => { state.shapeNoise.scale = v; }, (v) => v.toFixed(3));
-  bindRange('shapeOctaves', 'shapeOctavesVal', () => state.shapeNoise.octaves, (v) => { state.shapeNoise.octaves = v; });
-  bindRange('shapePersist', 'shapePersistVal', () => state.shapeNoise.persistence, (v) => { state.shapeNoise.persistence = v; }, (v) => v.toFixed(2));
-  bindRange('undulationSpeed', 'undulationSpeedVal', () => state.animation.speed, (v) => { state.animation.speed = v; }, (v) => v.toFixed(2));
-  bindRange('colorDrift', 'colorDriftVal', () => state.animation.colorDrift, (v) => { state.animation.colorDrift = v; }, (v) => v.toFixed(2));
+  initShape3dControls();
 
-  bindRange('colorScale', 'colorScaleVal', () => state.colorNoise.scale, (v) => { state.colorNoise.scale = v; }, (v) => v.toFixed(3));
-  bindRange('colorOctaves', 'colorOctavesVal', () => state.colorNoise.octaves, (v) => { state.colorNoise.octaves = v; });
-  bindRange('colorPersist', 'colorPersistVal', () => state.colorNoise.persistence, (v) => { state.colorNoise.persistence = v; }, (v) => v.toFixed(2));
-  bindRange('colorOffset', 'colorOffsetVal', () => state.colorNoise.seedOffset, (v) => { state.colorNoise.seedOffset = v; });
-  bindRange('haloThreshold', 'haloThresholdVal', () => state.adjacency.haloSizeThreshold, (v) => { state.adjacency.haloSizeThreshold = v; });
+  initShape3dDragRotate({
+    preview,
+    getMode: () => state.generateMode,
+    getRotation: () => ({
+      x: state.shape3d.rotationX,
+      y: state.shape3d.rotationY,
+    }),
+    setRotation: (x, y) => {
+      patchShape3d({ rotationX: x, rotationY: y });
+      syncRange('shape3dRotX', 'shape3dRotXVal', x, (v) => String(Math.round(v)));
+      syncRange('shape3dRotY', 'shape3dRotYVal', y, (v) => String(Math.round(v)));
+    },
+    onRotate: () => render(),
+    onCommit: () => saveState(state),
+  });
 
-  document.getElementById('colorNoiseEnabled')!.addEventListener('change', (e) => {
-    state.colorNoise.enabled = (e.target as HTMLInputElement).checked;
+  document.getElementById('animationEnabled')!.addEventListener('change', (e) => {
+    state.animation.enabled = (e.target as HTMLInputElement).checked;
+    if (!state.animation.enabled && !state.animation.animateColorBlocks) {
+      smoothedTime = 0;
+      render(0);
+    }
+    updateAnimationControls();
+    saveState(state);
+  });
+
+  document.getElementById('animateColorBlocks')!.addEventListener('change', (e) => {
+    state.animation.animateColorBlocks = (e.target as HTMLInputElement).checked;
+    if (!state.animation.enabled && !state.animation.animateColorBlocks) {
+      smoothedTime = 0;
+      render(0);
+    } else if (state.animation.animateColorBlocks) {
+      render(smoothedTime);
+    }
+    updateAnimationControls();
+    saveState(state);
+  });
+
+  document.getElementById('loopLength')!.addEventListener('change', (e) => {
+    setAnimationLoopLength(parseInt((e.target as HTMLSelectElement).value, 10));
     debouncedRender();
   });
 
-  document.getElementById('blobHalosEnabled')!.addEventListener('change', (e) => {
-    state.adjacency.blobHalosEnabled = (e.target as HTMLInputElement).checked;
-    debouncedRender();
-  });
+  bindRange('animationSpeed', 'animationSpeedVal', () => state.animation.speed, (v) => { state.animation.speed = v; }, (v) => v.toFixed(2));
 
   document.getElementById('loopSeamlessly')!.addEventListener('change', (e) => {
     state.loopSeamlessly = (e.target as HTMLInputElement).checked;
     saveState(state);
   });
 
-  document.getElementById('regenerateBtn')!.addEventListener('click', () => render());
+  document.getElementById('regenerateBtn')!.addEventListener('click', () => render(0, true));
 
   document.getElementById('downloadSvgBtn')!.addEventListener('click', () => {
     downloadSvg(buildRenderContext(), state.seed);
   });
 
   document.getElementById('recordMp4Btn')!.addEventListener('click', async () => {
-    const duration = parseInt((document.getElementById('recordDuration') as HTMLSelectElement).value, 10);
+    const exportAnimation = exportAnimationParams();
+    const duration = parseRecordDurationSec();
     const progress = document.getElementById('recordProgress')!;
     const bar = document.getElementById('progressBar')!;
     const text = document.getElementById('progressText')!;
@@ -179,26 +512,52 @@ function initControls(): void {
       text.textContent = msg;
     };
 
-    const loopPeriod = 10;
-    const fps = state.cols * state.rows > 8000 ? 15 : 30;
+    const { cols, rows } = renderDims();
+    const fps = cols * rows > 8000 ? 15 : 24;
+    const renderFrame = (spec: ExportFrameSpec) => renderExportFrame(spec, exportAnimation);
 
+    if (
+      state.generateMode === 'gradient' &&
+      !exportAnimation.animateColorBlocks
+    ) {
+      alert('Gradient mode is static. Switch to Pattern mode, or use Color blocks with animation enabled.');
+      progress.classList.add('hidden');
+      btn.disabled = false;
+      return;
+    }
+
+    exportInProgress = true;
     try {
       await recordMp4(
-        canvas,
+        recordCanvas,
         duration,
         fps,
         onProgress,
         renderFrame,
-        loopPeriod,
+        exportAnimation,
         state.loopSeamlessly,
       );
-    } catch {
+    } catch (primaryErr) {
+      console.warn('MP4 export failed, trying fallback recorder', primaryErr);
       try {
-        await recordMp4Fallback(canvas, duration, fps, onProgress, renderFrame);
+        await recordMp4Fallback(
+          recordCanvas,
+          duration,
+          fps,
+          onProgress,
+          renderFrame,
+          exportAnimation,
+          state.loopSeamlessly,
+        );
       } catch (err) {
-        alert(`Recording failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        const detail =
+          primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
+        alert(
+          `Recording failed: ${err instanceof Error ? err.message : 'Unknown error'}\n\nEncoder error: ${detail}`,
+        );
       }
     } finally {
+      exportInProgress = false;
       btn.disabled = false;
       render();
     }
@@ -206,22 +565,18 @@ function initControls(): void {
 }
 
 async function init(): Promise<void> {
+  if (!state.shape3d) state.shape3d = { ...defaultShape3d };
   syncUiFromState();
   initControls();
 
-  initCellTypeUi(
+  ({ refresh: refreshCellTypeUi } = initCellTypeUi(
     document.getElementById('cellTypePanel')!,
     () => state,
-    (s) => { state = s; },
+    (s) => {
+      state = s;
+    },
     debouncedRender,
-  );
-
-  initColorSchemeUi(
-    document.getElementById('colorSchemePanel')!,
-    () => state,
-    (s) => { state = s; },
-    debouncedRender,
-  );
+  ));
 
   await preloadTypeSvgs(state.cellTypes);
   render();

@@ -1,6 +1,20 @@
 import type { CellTypeDef } from './types';
+import { TYPE_IDS } from './types';
+import { LOGO_SVG_MARKUP, LOGO_SVG_VIEWBOX } from './logoCell';
 
 const svgImageCache = new Map<string, HTMLImageElement>();
+
+export function svgMarkupForType(type: CellTypeDef): string | undefined {
+  if (type.svgMarkup) return type.svgMarkup;
+  if (type.id === TYPE_IDS.logo) return LOGO_SVG_MARKUP;
+  return undefined;
+}
+
+export function svgViewBoxForType(type: CellTypeDef): string {
+  if (type.svgViewBox) return type.svgViewBox;
+  if (type.id === TYPE_IDS.logo) return LOGO_SVG_VIEWBOX;
+  return '0 0 100 100';
+}
 
 export function parseSvgUpload(
   file: File,
@@ -52,14 +66,15 @@ export function getSvgCache(): Map<string, HTMLImageElement> {
 
 export function preloadTypeSvgs(types: CellTypeDef[]): Promise<unknown[]> {
   const promises = types
-    .filter((t) => t.mode === 'svg' && t.svgSymbolId && t.svgMarkup)
+    .filter((t) => t.mode === 'svg' && t.svgSymbolId && svgMarkupForType(t))
     .map((t) => {
+      const markup = svgMarkupForType(t)!;
       const dataUrl =
         'data:image/svg+xml;base64,' +
         btoa(
           unescape(
             encodeURIComponent(
-              `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">${t.svgMarkup}</svg>`,
+              `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${svgViewBoxForType(t)}">${markup}</svg>`,
             ),
           ),
         );

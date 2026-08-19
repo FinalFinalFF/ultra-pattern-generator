@@ -143,3 +143,15 @@ export function sampleNoise(
   const y = (row + offset) * params.scale;
   return noise.fbm(x, y, time, params.octaves, params.persistence);
 }
+
+export function sampleNoiseAdvected(
+  noise: SimplexNoise,
+  col: number,
+  row: number,
+  time: number,
+  params: { scale: number; octaves: number; persistence: number },
+  offset: number,
+  warp: { dx: number; dy: number },
+): number {
+  return sampleNoise(noise, col - warp.dx, row - warp.dy, time, params, offset);
+}

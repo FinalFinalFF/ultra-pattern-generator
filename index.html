@@ -3,21 +3,31 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Grid Pattern Generator</title>
+    <title>Ultra Pattern Generator</title>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
     <div class="container">
       <aside class="sidebar">
-        <h1>Grid Pattern Generator</h1>
+        <h1>Ultra Pattern Generator</h1>
+        <button type="button" id="resetAllDefaults" class="reset-defaults-btn">Reset to Defaults</button>
 
         <details class="section" open>
           <summary>Pattern</summary>
           <div class="section-body">
+            <div class="mode-toggle" role="group" aria-label="Generation mode">
+              <button type="button" id="modePattern" class="mode-toggle-btn active" data-mode="pattern">Pattern</button>
+              <button type="button" id="modeShapes3d" class="mode-toggle-btn" data-mode="shapes3d">3D Shapes</button>
+              <button type="button" id="modeGradient" class="mode-toggle-btn" data-mode="gradient">Gradient</button>
+            </div>
             <label>Seed<input type="text" id="seed" value="pattern-2024" /></label>
             <button type="button" id="randomizeBtn">Randomize</button>
-            <label>Columns<input type="number" id="cols" min="10" max="120" value="60" /></label>
-            <label>Rows<input type="number" id="rows" min="10" max="120" value="34" /></label>
+            <label class="pattern-only-control">Columns <span id="colsVal">60</span>
+              <input type="range" id="cols" min="10" max="120" step="1" value="60" />
+            </label>
+            <label class="pattern-only-control">Rows <span id="rowsVal">34</span>
+              <input type="range" id="rows" min="10" max="120" step="1" value="34" />
+            </label>
             <label>Cell size <span id="cellSizeVal">16</span>px
               <input type="range" id="cellSize" min="4" max="32" value="16" />
             </label>
@@ -25,50 +35,47 @@
         </details>
 
         <details class="section" open>
-          <summary>Shape Noise</summary>
+          <summary>Color</summary>
           <div class="section-body">
-            <label>Scale <span id="shapeScaleVal">0.045</span>
-              <input type="range" id="shapeScale" min="0.01" max="0.2" step="0.005" value="0.045" />
-            </label>
-            <label>Octaves <span id="shapeOctavesVal">2</span>
-              <input type="range" id="shapeOctaves" min="1" max="4" step="1" value="2" />
-            </label>
-            <label>Persistence <span id="shapePersistVal">0.35</span>
-              <input type="range" id="shapePersist" min="0.1" max="0.9" step="0.05" value="0.35" />
-            </label>
-            <label>Undulation speed <span id="undulationSpeedVal">0.06</span>
-              <input type="range" id="undulationSpeed" min="0" max="0.5" step="0.01" value="0.06" />
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" id="blobHalosEnabled" checked /> Blob halos
-            </label>
-            <label>Halo threshold <span id="haloThresholdVal">8</span>
-              <input type="range" id="haloThreshold" min="4" max="32" step="1" value="8" />
-            </label>
+            <div id="colorSchemeGrid" class="color-scheme-grid" role="group" aria-label="Color scheme"></div>
           </div>
         </details>
 
-        <details class="section">
-          <summary>Color Noise</summary>
+        <details class="section shapes3d-only hidden" open id="shape3dSection">
+          <summary>3D Shape</summary>
           <div class="section-body">
-            <label class="checkbox-label">
-              <input type="checkbox" id="colorNoiseEnabled" /> Enable color noise
+            <label>Shape
+              <select id="shape3dKind">
+                <option value="sphere">Sphere</option>
+                <option value="box">Box</option>
+                <option value="torus">Torus</option>
+                <option value="ring">Ribbon ring</option>
+                <option value="ringArc">Ribbon arc</option>
+                <option value="disc">Disc</option>
+                <option value="capsule">Capsule</option>
+                <option value="cone">Cone</option>
+                <option value="cylinder">Cylinder</option>
+              </select>
             </label>
-            <label>Scale <span id="colorScaleVal">0.04</span>
-              <input type="range" id="colorScale" min="0.01" max="0.2" step="0.005" value="0.04" />
+            <label>Position X <span id="shape3dPosXVal">0.00</span>
+              <input type="range" id="shape3dPosX" min="-1.5" max="1.5" step="0.05" value="0" />
             </label>
-            <label>Octaves <span id="colorOctavesVal">2</span>
-              <input type="range" id="colorOctaves" min="1" max="4" step="1" value="2" />
+            <label>Position Y <span id="shape3dPosYVal">0.00</span>
+              <input type="range" id="shape3dPosY" min="-1.5" max="1.5" step="0.05" value="0" />
             </label>
-            <label>Persistence <span id="colorPersistVal">0.5</span>
-              <input type="range" id="colorPersist" min="0.1" max="0.9" step="0.05" value="0.5" />
+            <label>Position Z <span id="shape3dPosZVal">0.00</span>
+              <input type="range" id="shape3dPosZ" min="-1.5" max="1.5" step="0.05" value="0" />
             </label>
-            <label>Seed offset <span id="colorOffsetVal">100</span>
-              <input type="range" id="colorOffset" min="0" max="500" step="10" value="100" />
+            <label>Scale <span id="shape3dScaleVal">1.15</span>
+              <input type="range" id="shape3dScale" min="0.3" max="4" step="0.05" value="1.15" />
             </label>
-            <label>Color drift <span id="colorDriftVal">0.15</span>
-              <input type="range" id="colorDrift" min="0" max="0.5" step="0.01" value="0.15" />
+            <label>Rotation X <span id="shape3dRotXVal">0</span>°
+              <input type="range" id="shape3dRotX" min="-89" max="89" step="1" value="0" />
             </label>
+            <label>Rotation Y <span id="shape3dRotYVal">25</span>°
+              <input type="range" id="shape3dRotY" min="0" max="360" step="1" value="25" />
+            </label>
+            <p class="section-hint">Drag the preview to rotate.</p>
           </div>
         </details>
 
@@ -77,24 +84,35 @@
           <div class="section-body" id="cellTypePanel"></div>
         </details>
 
-        <details class="section">
-          <summary>Color Schemes</summary>
-          <div class="section-body" id="colorSchemePanel"></div>
-        </details>
-
-        <details class="section" open>
-          <summary>Export</summary>
+        <details class="section pattern-only-control" open>
+          <summary>Animation</summary>
           <div class="section-body">
-            <button type="button" id="regenerateBtn">Regenerate</button>
-            <button type="button" id="downloadSvgBtn">Download SVG</button>
+            <label class="checkbox-label">
+              <input type="checkbox" id="animationEnabled" /> Animate pattern
+            </label>
+            <label class="checkbox-label color-blocks-animation-control hidden">
+              <input type="checkbox" id="animateColorBlocks" /> Animate color blocks
+            </label>
+            <label>Loop length
+              <select id="loopLength">
+                <option value="3">3 seconds</option>
+                <option value="5">5 seconds</option>
+                <option value="10" selected>10 seconds</option>
+                <option value="20">20 seconds</option>
+              </select>
+            </label>
+            <label>Animation speed <span id="animationSpeedVal">0.20</span>
+              <input type="range" id="animationSpeed" min="0.05" max="1" step="0.05" value="0.2" />
+            </label>
             <label>Record duration
               <select id="recordDuration">
                 <option value="3">3 seconds</option>
                 <option value="5" selected>5 seconds</option>
                 <option value="10">10 seconds</option>
+                <option value="20">20 seconds</option>
               </select>
             </label>
-            <label class="checkbox-label">
+            <label class="checkbox-label" title="Snaps export to whole loop cycles so the animation returns to the start frame naturally">
               <input type="checkbox" id="loopSeamlessly" checked /> Loop seamlessly
             </label>
             <button type="button" id="recordMp4Btn">Record MP4</button>
@@ -104,10 +122,19 @@
             </div>
           </div>
         </details>
+
+        <details class="section" open>
+          <summary>Export</summary>
+          <div class="section-body">
+            <button type="button" id="regenerateBtn">Regenerate</button>
+            <button type="button" id="downloadSvgBtn">Download SVG</button>
+          </div>
+        </details>
       </aside>
 
       <main class="preview-area">
-        <canvas id="preview"></canvas>
+        <div id="preview" class="svg-preview"></div>
+        <canvas id="recordCanvas" class="hidden-canvas" aria-hidden="true"></canvas>
       </main>
     </div>
     <script type="module" src="/src/main.ts"></script>

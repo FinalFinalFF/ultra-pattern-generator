@@ -1,6 +1,6 @@
 # Grid Pattern Generator
 
-Generate organic grid patterns that mix line meshes, dots, and solid shapes — clustered by Simplex noise fields. Edit cell types, color schemes, animate patterns, and export as SVG or MP4.
+Generate organic grid patterns that mix line meshes, dots, solid shapes, logos, outlines, and crosshatch — clustered by Simplex noise fields. Edit cell types, animate patterns, and export as SVG or MP4.
 
 ## Local development
 
@@ -13,10 +13,10 @@ npm run preview    # serve production build locally
 
 ## Features
 
-- **Shape noise** — clusters cell types (empty, grid lines, dots, solids) into organic blobs
-- **Color noise** — independent noise field clusters scheme colors across the grid
+- **Shape noise** — clusters cell types (empty, grid lines, dots, solids, accents) into organic blobs
+- **Accent placement** — outline, crosshatch, and logo overlays on grid carriers
 - **Cell type editor** — add, edit, remove, reorder types; parametric modes or custom SVG upload
-- **Color scheme editor** — multiple schemes with add/edit/remove colors
+- **3D shapes mode** — ray-traced SDF scene mapped to cell types (experimental)
 - **SVG export** — clean vector output
 - **MP4 recording** — frame capture + ffmpeg.wasm conversion
 - **Settings persist** in localStorage
@@ -61,13 +61,15 @@ git push -u origin main
 src/
   main.ts           App boot, controls, animation loop
   noise.ts          Seeded Simplex noise
-  generate.ts       Dual-field grid generation
+  generate.ts       Grid generation (pattern + 3D modes)
+  shapeZones.ts     Noise-based shape assignment
+  shapes3d.ts       SDF ray tracing for 3D mode
+  accentPlacement.ts Outline, crosshatch, logo placement
+  adjacency.ts      Blob halos and void fill
   cellTypes.ts      Cell type model + classification
-  colorSchemes.ts   Color scheme presets
-  renderCanvas.ts   Canvas rendering + color resolution
-  renderSvg.ts      SVG export
+  renderCanvas.ts   Canvas/SVG rendering and export
   export.ts         MP4 recording via ffmpeg.wasm
   cellTypeUi.ts     Cell type management panel
-  colorSchemeUi.ts  Color scheme management panel
+  svgSymbols.ts     SVG symbol cache and upload
   state.ts          localStorage persistence
 ```
