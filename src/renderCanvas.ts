@@ -416,6 +416,62 @@ export function downloadSvg(ctx: RenderContext, seed: string): void {
   URL.revokeObjectURL(url);
 }
 
+export async function downloadPng(ctx: RenderContext, seed: string, dpr = 2): Promise<void> {
+  const canvas = document.createElement('canvas');
+  await rasterizeContextToCanvas(canvas, ctx, dpr);
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((next) => {
+      if (next) resolve(next);
+      else reject(new Error('PNG encode failed'));
+    }, 'image/png');
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pattern-${seed.replace(/[^a-z0-9-_]/gi, '-')}.png`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Clipboard payload Figma accepts on paste (plain SVG markup). */
+export async function copySvgMarkupToClipboard(svg: string): Promise<void> {
+  const payload = svg.includes('<?xml') ? svg : `<?xml version="1.0" encoding="UTF-8"?>\n${svg}`;
+  try {
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'text/plain': Promise.resolve(new Blob([payload], { type: 'text/plain' })),
+        'text/html': Promise.resolve(new Blob([payload], { type: 'text/html' })),
+      }),
+    ]);
+    return;
+  } catch {
+    // Some browsers only allow text/plain, or require a focused document.
+  }
+  try {
+    await navigator.clipboard.writeText(payload);
+    return;
+  } catch {
+    copyWithExecCommand(payload);
+  }
+}
+
+export async function copySvgToClipboard(ctx: RenderContext): Promise<void> {
+  await copySvgMarkupToClipboard(buildSvgMarkup(ctx));
+}
+
+function copyWithExecCommand(text: string): void {
+  const el = document.createElement('textarea');
+  el.value = text;
+  el.setAttribute('readonly', '');
+  el.style.position = 'fixed';
+  el.style.opacity = '0';
+  document.body.appendChild(el);
+  el.select();
+  const ok = document.execCommand('copy');
+  el.remove();
+  if (!ok) throw new Error('Clipboard copy was blocked');
+}
+
 /** Rasterize the same SVG used for preview — guarantees export matches on-screen output. */
 export function rasterizeContextToCanvas(
   canvas: HTMLCanvasElement,

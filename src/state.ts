@@ -65,7 +65,7 @@ export const defaultShapeNoise = {
 } as const;
 
 export const defaultState: AppState = {
-  seed: 'pattern-2024',
+  seed: 'dusk-grid-204',
   cols: 60,
   rows: 34,
   cellSize: 16,

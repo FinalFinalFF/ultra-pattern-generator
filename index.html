@@ -3,46 +3,81 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ultra Pattern Generator</title>
+    <title>FinalFinal™ Pattern Generator</title>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
     <div class="container">
-      <aside class="sidebar">
-        <h1>Ultra Pattern Generator</h1>
-        <button type="button" id="resetAllDefaults" class="reset-defaults-btn">Reset to Defaults</button>
+      <header class="topbar">
+        <div class="topbar-title">
+          <span class="topbar-wordmark">FinalFinal™</span>
+          <span class="topbar-product">Pattern Generator</span>
+        </div>
+        <div class="topbar-rule" aria-hidden="true"></div>
+        <button type="button" id="remixBtn" class="topbar-btn topbar-btn-primary">Remix</button>
+        <button type="button" id="shuffleColorsBtn" class="topbar-btn">Shuffle colors</button>
+        <div class="topbar-seed">
+          <label for="seed" class="topbar-seed-label">Seed</label>
+          <input type="text" id="seed" value="dusk-grid-204" spellcheck="false" autocomplete="off" />
+        </div>
+        <div class="topbar-spacer"></div>
+        <button type="button" id="savedOpenBtn" class="topbar-btn">Saved</button>
+        <button type="button" id="saveBtn" class="topbar-btn">Save</button>
+        <div class="topbar-rule" aria-hidden="true"></div>
+        <button type="button" id="resetAllDefaults" class="topbar-btn">Reset</button>
+      </header>
 
-        <details class="section" open>
-          <summary>Pattern</summary>
+      <div class="workspace">
+      <main class="preview-area">
+        <div class="preview-scroll" id="previewScroll">
+          <div class="preview-sizer">
+            <div id="preview" class="svg-preview"></div>
+          </div>
+        </div>
+        <canvas id="recordCanvas" class="hidden-canvas" aria-hidden="true"></canvas>
+        <div class="preview-hud preview-zoom" role="group" aria-label="Preview zoom">
+          <button type="button" id="zoomOut" aria-label="Zoom out">−</button>
+          <span id="zoomVal" class="zoom-val">100%</span>
+          <button type="button" id="zoomIn" aria-label="Zoom in">+</button>
+          <button type="button" id="zoomFit" aria-label="Fit to view">FIT</button>
+          <button type="button" id="zoom100" aria-label="Actual size">100%</button>
+        </div>
+        <div class="preview-hud preview-dims" id="previewDims" aria-live="polite">0 x 0</div>
+      </main>
+
+      <aside class="sidebar">
+        <div class="mode-toggle" role="group" aria-label="Generation mode">
+          <button type="button" id="modePattern" class="mode-toggle-btn active" data-mode="pattern">Pattern</button>
+          <button type="button" id="modeShapes3d" class="mode-toggle-btn" data-mode="shapes3d">3D Shapes</button>
+          <button type="button" id="modeGradient" class="mode-toggle-btn" data-mode="gradient">Gradient</button>
+        </div>
+
+        <section class="section">
           <div class="section-body">
-            <div class="mode-toggle" role="group" aria-label="Generation mode">
-              <button type="button" id="modePattern" class="mode-toggle-btn active" data-mode="pattern">Pattern</button>
-              <button type="button" id="modeShapes3d" class="mode-toggle-btn" data-mode="shapes3d">3D Shapes</button>
-              <button type="button" id="modeGradient" class="mode-toggle-btn" data-mode="gradient">Gradient</button>
-            </div>
-            <label>Seed<input type="text" id="seed" value="pattern-2024" /></label>
-            <button type="button" id="randomizeBtn">Randomize</button>
-            <label class="pattern-only-control">Columns <span id="colsVal">60</span>
+            <label class="pattern-only-control">
+              <span class="range-head">Columns <span id="colsVal" class="range-val">60</span></span>
               <input type="range" id="cols" min="10" max="120" step="1" value="60" />
             </label>
-            <label class="pattern-only-control">Rows <span id="rowsVal">34</span>
+            <label class="pattern-only-control">
+              <span class="range-head">Rows <span id="rowsVal" class="range-val">34</span></span>
               <input type="range" id="rows" min="10" max="120" step="1" value="34" />
             </label>
-            <label>Cell size <span id="cellSizeVal">16</span>px
+            <label>
+              <span class="range-head">Cell size <span class="range-val"><span id="cellSizeVal">16</span>px</span></span>
               <input type="range" id="cellSize" min="4" max="32" value="16" />
             </label>
           </div>
-        </details>
+        </section>
 
-        <details class="section" open>
-          <summary>Color</summary>
+        <section class="section">
+          <h2 class="section-title">Color</h2>
           <div class="section-body">
             <div id="colorSchemeGrid" class="color-scheme-grid" role="group" aria-label="Color scheme"></div>
           </div>
-        </details>
+        </section>
 
-        <details class="section shapes3d-only hidden" open id="shape3dSection">
-          <summary>3D Shape</summary>
+        <section class="section shapes3d-only hidden" id="shape3dSection">
+          <h2 class="section-title">3D Shape</h2>
           <div class="section-body">
             <label>Shape
               <select id="shape3dKind">
@@ -57,85 +92,134 @@
                 <option value="cylinder">Cylinder</option>
               </select>
             </label>
-            <label>Position X <span id="shape3dPosXVal">0.00</span>
+            <label>
+              <span class="range-head">Position X <span id="shape3dPosXVal" class="range-val">0.00</span></span>
               <input type="range" id="shape3dPosX" min="-1.5" max="1.5" step="0.05" value="0" />
             </label>
-            <label>Position Y <span id="shape3dPosYVal">0.00</span>
+            <label>
+              <span class="range-head">Position Y <span id="shape3dPosYVal" class="range-val">0.00</span></span>
               <input type="range" id="shape3dPosY" min="-1.5" max="1.5" step="0.05" value="0" />
             </label>
-            <label>Position Z <span id="shape3dPosZVal">0.00</span>
+            <label>
+              <span class="range-head">Position Z <span id="shape3dPosZVal" class="range-val">0.00</span></span>
               <input type="range" id="shape3dPosZ" min="-1.5" max="1.5" step="0.05" value="0" />
             </label>
-            <label>Scale <span id="shape3dScaleVal">1.15</span>
+            <label>
+              <span class="range-head">Scale <span id="shape3dScaleVal" class="range-val">1.15</span></span>
               <input type="range" id="shape3dScale" min="0.3" max="4" step="0.05" value="1.15" />
             </label>
-            <label>Rotation X <span id="shape3dRotXVal">0</span>°
+            <label>
+              <span class="range-head">Rotation X <span class="range-val"><span id="shape3dRotXVal">0</span>°</span></span>
               <input type="range" id="shape3dRotX" min="-89" max="89" step="1" value="0" />
             </label>
-            <label>Rotation Y <span id="shape3dRotYVal">25</span>°
+            <label>
+              <span class="range-head">Rotation Y <span class="range-val"><span id="shape3dRotYVal">25</span>°</span></span>
               <input type="range" id="shape3dRotY" min="0" max="360" step="1" value="25" />
             </label>
             <p class="section-hint">Drag the preview to rotate.</p>
           </div>
-        </details>
+        </section>
 
-        <details class="section">
-          <summary>Cell Types</summary>
+        <section class="section">
+          <h2 class="section-title">Cell Types</h2>
           <div class="section-body" id="cellTypePanel"></div>
-        </details>
+        </section>
 
-        <details class="section pattern-only-control" open>
-          <summary>Animation</summary>
-          <div class="section-body">
-            <label class="checkbox-label">
-              <input type="checkbox" id="animationEnabled" /> Animate pattern
-            </label>
-            <label class="checkbox-label color-blocks-animation-control hidden">
-              <input type="checkbox" id="animateColorBlocks" /> Animate color blocks
-            </label>
-            <label>Loop length
-              <select id="loopLength">
-                <option value="3">3 seconds</option>
-                <option value="5">5 seconds</option>
-                <option value="10" selected>10 seconds</option>
-                <option value="20">20 seconds</option>
-              </select>
-            </label>
-            <label>Animation speed <span id="animationSpeedVal">0.20</span>
-              <input type="range" id="animationSpeed" min="0.05" max="1" step="0.05" value="0.2" />
-            </label>
-            <label>Record duration
-              <select id="recordDuration">
-                <option value="3">3 seconds</option>
-                <option value="5" selected>5 seconds</option>
-                <option value="10">10 seconds</option>
-                <option value="20">20 seconds</option>
-              </select>
-            </label>
-            <label class="checkbox-label" title="Snaps export to whole loop cycles so the animation returns to the start frame naturally">
-              <input type="checkbox" id="loopSeamlessly" checked /> Loop seamlessly
-            </label>
-            <button type="button" id="recordMp4Btn">Record MP4</button>
-            <div id="recordProgress" class="progress hidden">
-              <div class="progress-bar" id="progressBar"></div>
-              <span id="progressText"></span>
+        <section class="section pattern-only-control">
+          <h2 class="section-title">Animation</h2>
+          <div class="section-body animation-panel">
+            <div class="anim-group">
+              <label class="toggle-row">
+                <span>Animate pattern</span>
+                <input type="checkbox" id="animationEnabled" />
+              </label>
+              <label class="toggle-row color-blocks-animation-control hidden">
+                <span>Animate color blocks</span>
+                <input type="checkbox" id="animateColorBlocks" />
+              </label>
+              <div id="animationPlayback" class="anim-playback">
+                <label>
+                  <span class="range-head">Speed <span id="animationSpeedVal" class="range-val">0.20</span></span>
+                  <input type="range" id="animationSpeed" min="0.05" max="1" step="0.05" value="0.2" />
+                </label>
+                <label class="field-row">
+                  <span>Loop</span>
+                  <select id="loopLength">
+                    <option value="3">3s</option>
+                    <option value="5">5s</option>
+                    <option value="10" selected>10s</option>
+                    <option value="20">20s</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div class="anim-group">
+              <h3 class="anim-subhead">Record</h3>
+              <label class="field-row">
+                <span>Duration</span>
+                <select id="recordDuration">
+                  <option value="3">3s</option>
+                  <option value="5" selected>5s</option>
+                  <option value="10">10s</option>
+                  <option value="20">20s</option>
+                </select>
+              </label>
+              <label class="toggle-row" title="Snaps export to whole loop cycles so the animation returns to the start frame naturally">
+                <span>Loop seamlessly</span>
+                <input type="checkbox" id="loopSeamlessly" checked />
+              </label>
+              <button type="button" id="recordMp4Btn">Record MP4</button>
+              <div id="recordProgress" class="progress hidden">
+                <div class="progress-bar" id="progressBar"></div>
+                <span id="progressText"></span>
+              </div>
             </div>
           </div>
-        </details>
+        </section>
 
-        <details class="section" open>
-          <summary>Export</summary>
+        <section class="section">
+          <h2 class="section-title">Export</h2>
           <div class="section-body">
-            <button type="button" id="regenerateBtn">Regenerate</button>
+            <button type="button" id="copyFigmaBtn">Copy to Figma</button>
             <button type="button" id="downloadSvgBtn">Download SVG</button>
+            <button type="button" id="downloadPngBtn">Download PNG</button>
           </div>
-        </details>
+        </section>
       </aside>
+      </div>
+    </div>
 
-      <main class="preview-area">
-        <div id="preview" class="svg-preview"></div>
-        <canvas id="recordCanvas" class="hidden-canvas" aria-hidden="true"></canvas>
-      </main>
+    <div id="savedOverlay" class="saved-overlay hidden">
+      <div class="saved-overlay-chrome">
+        <div class="saved-overlay-bar">
+          <div class="topbar-title">
+            <span class="topbar-wordmark">FinalFinal™</span>
+            <span class="topbar-product">Pattern Generator</span>
+          </div>
+          <div class="topbar-spacer"></div>
+          <button type="button" id="savedCloseBtn" class="topbar-btn">Close</button>
+        </div>
+        <div class="saved-overlay-subbar">
+          <h1 class="saved-overlay-title">Saved Patterns</h1>
+        </div>
+      </div>
+      <p id="savedEmpty" class="saved-empty hidden">No saved patterns yet. Use Save to keep the current graphic.</p>
+      <div id="savedGrid" class="saved-grid"></div>
+    </div>
+
+    <div id="cellTypeEditorOverlay" class="editor-overlay hidden" role="dialog" aria-modal="true" aria-label="Edit cell type">
+      <div class="editor-overlay-bar">
+        <div class="topbar-title">
+          <span class="topbar-wordmark">FinalFinal™</span>
+          <span class="topbar-product">Pattern Generator</span>
+        </div>
+        <canvas id="cellTypeEditorPreview" class="editor-overlay-preview" width="36" height="36" aria-hidden="true"></canvas>
+        <div class="topbar-spacer"></div>
+        <button type="button" id="cellTypeEditorDone" class="topbar-btn">Done</button>
+      </div>
+      <div class="editor-overlay-body">
+        <div id="cellTypeEditorForm" class="editor-overlay-form"></div>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

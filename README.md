@@ -69,6 +69,9 @@ src/
   logoCell.ts         Logo mark markup and symbol id
 
   renderCanvas.ts     SVG markup (source of truth), canvas rasterize, SVG download
+  previewChrome.ts    Preview zoom, fit, and pixel-size readout
+  seedNames.ts        Short adjective-noun-number seed names
+  savedPatterns.ts    Saved pattern list in localStorage
   meshLines.ts        Shared-edge grid line collection
   hatch.ts            Hatch, outline, and crosshatch cell drawing
   hexagon.ts          Hexagon geometry

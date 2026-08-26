@@ -12,11 +12,14 @@ import {
 import { getColorBlocksPhase, type ExportFrameSpec } from './animation';
 import { recordMp4, recordMp4Fallback } from './export';
 import { generateGrid } from './generate';
-import { renderToSvg, downloadSvg, rasterizeContextToCanvas } from './renderCanvas';
+import { initPreviewChrome } from './previewChrome';
+import { renderToSvg, downloadSvg, downloadPng, copySvgToClipboard, copySvgMarkupToClipboard, rasterizeContextToCanvas, buildSvgMarkup } from './renderCanvas';
 import { defaultShape3dForKind, measureHitRate, SHAPES3D_COLS, SHAPES3D_ROWS } from './shapes3d';
 import { initShape3dDragRotate } from './shape3dDrag';
 import { resolveShape3dMapping } from './shapes3dMapping';
 import { defaultShape3d, loadState, resetToDefaultState, saveState } from './state';
+import { randomSeedName } from './seedNames';
+import { deleteSavedPattern, loadSavedPatterns, reorderSavedPatterns, savePattern } from './savedPatterns';
 import { preloadTypeSvgs } from './svgSymbols';
 import type {
   AnimationParams,
@@ -38,6 +41,7 @@ let refreshCellTypeUi: () => void = () => {};
 
 const preview = document.getElementById('preview') as HTMLElement;
 const recordCanvas = document.getElementById('recordCanvas') as HTMLCanvasElement;
+let applyPreviewView = (): void => {};
 
 function debouncedRender(): void {
   if (debounceTimer) clearTimeout(debounceTimer);
@@ -144,6 +148,168 @@ function schemeRerollsOnReselect(id: ColorSchemeId): boolean {
   return isSeededScheme(id) || id === 'color-blocks';
 }
 
+function setSeed(next: string): void {
+  state.seed = next;
+  (document.getElementById('seed') as HTMLInputElement).value = next;
+}
+
+function remixPattern(): void {
+  setSeed(randomSeedName());
+  debouncedRender();
+}
+
+function shuffleColors(): void {
+  const ids = COLOR_SCHEMES.map((scheme) => scheme.id);
+  const others = ids.filter((id) => id !== state.colorSchemeId);
+  const pool = others.length > 0 ? others : ids;
+  const next = pool[Math.floor(Math.random() * pool.length)]!;
+  setColorScheme(next);
+  const btn = document.querySelector<HTMLButtonElement>(`[data-color-scheme="${next}"]`);
+  btn?.scrollIntoView({ block: 'nearest' });
+  btn?.focus();
+}
+
+function flashButton(btn: HTMLButtonElement, label: string, ms = 1400): void {
+  const previous = btn.textContent;
+  btn.textContent = label;
+  btn.disabled = true;
+  window.setTimeout(() => {
+    btn.textContent = previous;
+    btn.disabled = false;
+  }, ms);
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
+function svgDataUrl(svg: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function renderSavedOverlay(): void {
+  const items = loadSavedPatterns();
+  const grid = document.getElementById('savedGrid')!;
+  const empty = document.getElementById('savedEmpty')!;
+  empty.classList.toggle('hidden', items.length > 0);
+  grid.innerHTML = items
+    .map(
+      (item) => `
+      <div class="saved-card" data-saved-id="${escapeHtml(item.id)}">
+        <div class="saved-card-frame">
+          <span class="saved-card-grip" title="Drag to reorder" role="button" aria-label="Drag to reorder"></span>
+          <button type="button" class="saved-card-delete" aria-label="Delete ${escapeHtml(item.seed)}">×</button>
+          <button type="button" class="saved-card-preview" title="Copy SVG">
+            <img alt="" src="${svgDataUrl(item.svg)}">
+          </button>
+        </div>
+        <div class="saved-card-meta">
+          <span class="saved-card-seed">${escapeHtml(item.seed)}</span>
+        </div>
+      </div>`,
+    )
+    .join('');
+
+  grid.querySelectorAll<HTMLElement>('.saved-card').forEach((card) => {
+    const id = card.dataset.savedId!;
+    const preview = card.querySelector<HTMLButtonElement>('.saved-card-preview')!;
+    preview.addEventListener('click', async () => {
+      const match = loadSavedPatterns().find((item) => item.id === id);
+      if (!match) return;
+      try {
+        await copySvgMarkupToClipboard(match.svg);
+        const seed = card.querySelector('.saved-card-seed');
+        if (seed) {
+          const prev = seed.textContent;
+          seed.textContent = 'Copied';
+          window.setTimeout(() => {
+            seed.textContent = prev;
+          }, 1200);
+        }
+      } catch (err) {
+        alert(`Copy failed: ${err instanceof Error ? err.message : 'Clipboard permission denied'}`);
+      }
+    });
+
+    card.querySelector('.saved-card-delete')!.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (!confirm('Delete this saved pattern?')) return;
+      deleteSavedPattern(id);
+      renderSavedOverlay();
+    });
+  });
+
+  bindSavedCardReorder(grid);
+}
+
+function bindSavedCardReorder(grid: HTMLElement): void {
+  grid.querySelectorAll<HTMLElement>('.saved-card').forEach((card) => {
+    const grip = card.querySelector<HTMLElement>('.saved-card-grip');
+    grip?.addEventListener('pointerdown', () => {
+      card.draggable = true;
+    });
+    grip?.addEventListener('pointerup', () => {
+      if (!card.classList.contains('is-dragging')) card.draggable = false;
+    });
+    card.addEventListener('dragstart', (event) => {
+      event.dataTransfer?.setData('text/plain', card.dataset.savedId ?? '');
+      event.dataTransfer?.setDragImage(card, 24, 24);
+      card.classList.add('is-dragging');
+    });
+    card.addEventListener('dragend', () => {
+      card.draggable = false;
+      card.classList.remove('is-dragging');
+      const ids = [...grid.querySelectorAll<HTMLElement>('.saved-card')].map((el) => el.dataset.savedId!);
+      const current = loadSavedPatterns().map((item) => item.id);
+      if (ids.length === current.length && ids.every((id, i) => id === current[i])) return;
+      reorderSavedPatterns(ids);
+    });
+    card.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      const dragging = grid.querySelector<HTMLElement>('.saved-card.is-dragging');
+      if (!dragging || dragging === card) return;
+      const rect = card.getBoundingClientRect();
+      if (event.clientX > rect.left + rect.width / 2) card.after(dragging);
+      else card.before(dragging);
+    });
+    card.addEventListener('drop', (event) => event.preventDefault());
+  });
+}
+
+function setSavedOverlayOpen(open: boolean): void {
+  const overlay = document.getElementById('savedOverlay')!;
+  overlay.classList.toggle('hidden', !open);
+  if (open) {
+    renderSavedOverlay();
+  } else {
+    document.getElementById('savedGrid')!.innerHTML = '';
+  }
+}
+
+function initSavedPatternsUi(): void {
+  document.getElementById('saveBtn')!.addEventListener('click', () => {
+    try {
+      savePattern(state.seed, buildSvgMarkup(buildRenderContext()));
+      flashButton(document.getElementById('saveBtn') as HTMLButtonElement, 'Saved');
+      if (!document.getElementById('savedOverlay')!.classList.contains('hidden')) {
+        renderSavedOverlay();
+      }
+    } catch (err) {
+      alert(`Save failed: ${err instanceof Error ? err.message : 'Storage is full'}`);
+    }
+  });
+
+  document.getElementById('savedOpenBtn')!.addEventListener('click', () => setSavedOverlayOpen(true));
+  document.getElementById('savedCloseBtn')!.addEventListener('click', () => setSavedOverlayOpen(false));
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const editorOverlay = document.getElementById('cellTypeEditorOverlay');
+    if (editorOverlay && !editorOverlay.classList.contains('hidden')) return;
+    if (document.getElementById('savedOverlay')!.classList.contains('hidden')) return;
+    setSavedOverlayOpen(false);
+  });
+}
+
 function setColorScheme(id: ColorSchemeId): void {
   if (state.colorSchemeId === id) {
     if (schemeRerollsOnReselect(id)) {
@@ -209,6 +375,7 @@ function render(time = shouldRunPreviewAnimation() ? smoothedTime : 0, forceGrid
     grid = generateGrid(buildGeneratorContext(time));
   }
   renderToSvg(preview, buildRenderContext(time));
+  applyPreviewView();
 }
 
 async function renderExportFrame(spec: ExportFrameSpec, animation: AnimationParams): Promise<void> {
@@ -272,6 +439,7 @@ function updateAnimationControls(): void {
   const animDisabled = !patternAnim && !colorBlocksAnim;
   (document.getElementById('loopLength') as HTMLSelectElement).disabled = animDisabled;
   (document.getElementById('animationSpeed') as HTMLInputElement).disabled = animDisabled;
+  document.getElementById('animationPlayback')!.classList.toggle('is-disabled', animDisabled);
 
   document.querySelectorAll('.color-blocks-animation-control').forEach((el) => {
     el.classList.toggle('hidden', !usesColorBlocks(state.colorSchemeId));
@@ -421,15 +589,15 @@ function initControls(): void {
     debouncedRender();
   });
 
-  document.getElementById('randomizeBtn')!.addEventListener('click', () => {
-    state.seed = `pattern-${Date.now()}`;
-    (document.getElementById('seed') as HTMLInputElement).value = state.seed;
-    if (schemeRerollsOnReselect(state.colorSchemeId)) {
-      bumpColorFieldSeed();
-      applyActiveColorScheme();
-    }
-    debouncedRender();
+  document.getElementById('remixBtn')!.addEventListener('click', () => {
+    remixPattern();
   });
+
+  document.getElementById('shuffleColorsBtn')!.addEventListener('click', () => {
+    shuffleColors();
+  });
+
+  initSavedPatternsUi();
 
   document.getElementById('resetAllDefaults')!.addEventListener('click', () => {
     void resetAllToDefaults();
@@ -495,10 +663,36 @@ function initControls(): void {
     saveState(state);
   });
 
-  document.getElementById('regenerateBtn')!.addEventListener('click', () => render(0, true));
+  document.getElementById('copyFigmaBtn')!.addEventListener('click', async () => {
+    const btn = document.getElementById('copyFigmaBtn') as HTMLButtonElement;
+    try {
+      await copySvgToClipboard(buildRenderContext());
+      const label = btn.textContent;
+      btn.textContent = 'Copied';
+      btn.disabled = true;
+      window.setTimeout(() => {
+        btn.textContent = label;
+        btn.disabled = false;
+      }, 1400);
+    } catch (err) {
+      alert(`Copy failed: ${err instanceof Error ? err.message : 'Clipboard permission denied'}`);
+    }
+  });
 
   document.getElementById('downloadSvgBtn')!.addEventListener('click', () => {
     downloadSvg(buildRenderContext(), state.seed);
+  });
+
+  document.getElementById('downloadPngBtn')!.addEventListener('click', async () => {
+    const btn = document.getElementById('downloadPngBtn') as HTMLButtonElement;
+    btn.disabled = true;
+    try {
+      await downloadPng(buildRenderContext(), state.seed);
+    } catch (err) {
+      alert(`PNG export failed: ${err instanceof Error ? err.message : 'Could not rasterize'}`);
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   document.getElementById('recordMp4Btn')!.addEventListener('click', async () => {
@@ -582,6 +776,11 @@ async function init(): Promise<void> {
     },
     debouncedRender,
   ));
+
+  ({ apply: applyPreviewView } = initPreviewChrome(() => {
+    const { cols, rows } = renderDims();
+    return { width: cols * state.cellSize, height: rows * state.cellSize };
+  }));
 
   await preloadTypeSvgs(state.cellTypes);
   render();

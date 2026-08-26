@@ -1,13 +1,11 @@
 import {
   createDefaultCellType,
-  getDefaultCellTypes,
   hasEditableDensity,
   isNoiseBulkType,
   normalizeBulkDensities,
   redistributeDensities,
   reindexOrders,
 } from './cellTypes';
-import { applyColorScheme, colorFieldSeedForState } from './colorSchemes';
 import { renderCellPreview } from './renderCanvas';
 import { loadSvgIntoCache, parseSvgUpload, warnIfStorageLarge } from './svgSymbols';
 import type { AppState, CellTypeDef } from './types';
@@ -57,10 +55,8 @@ export function initCellTypeUi(
   container.innerHTML = `
     <div class="panel-actions">
       <button type="button" id="addCellType">+ Add Type</button>
-      <button type="button" id="resetCellTypes" class="secondary">Reset Defaults</button>
     </div>
     <div id="cellTypeList" class="item-list"></div>
-    <div id="cellTypeEditor" class="editor-panel hidden"></div>
   `;
 
   container.querySelector('#addCellType')!.addEventListener('click', () => {
@@ -76,50 +72,48 @@ export function initCellTypeUi(
     renderList(container, getState, setState, onChange, newType.id);
   });
 
-  container.querySelector('#resetCellTypes')!.addEventListener('click', () => {
-    if (!confirm('Reset cell types to defaults?')) return;
-    const s = getState();
-    const cellTypes = applyColorScheme(
-      getDefaultCellTypes(),
-      s.colorSchemeId,
-      colorFieldSeedForState(s.colorSchemeId, s.seed, s.colorFieldSeed),
-    );
-    setState({
-      ...s,
-      cellTypes,
-    });
-    onChange();
-    renderList(container, getState, setState, onChange);
+  renderList(container, getState, setState, onChange);
+
+  const overlay = document.getElementById('cellTypeEditorOverlay')!;
+  document.getElementById('cellTypeEditorDone')!.addEventListener('click', () => closeEditor(overlay));
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (overlay.classList.contains('hidden')) return;
+    event.preventDefault();
+    closeEditor(overlay);
   });
 
-  renderList(container, getState, setState, onChange);
   return {
     refresh: () => renderList(container, getState, setState, onChange),
   };
 }
 
-function renderTypeRow(type: CellTypeDef, idx: number, total: number): string {
+function renderTypeRow(type: CellTypeDef): string {
   const desc = typeDescription(type);
   const editable = hasEditableDensity(type);
   const min = densityMinForType(type.id);
   const densityControl = editable
-    ? `<label class="item-density-wrap" title="Density">
-        <input type="range" class="item-density" data-density="${type.id}" min="${min}" max="1" step="0.01" value="${type.density}"/>
-        <span class="item-density-val">${Math.round(type.density * 100)}%</span>
-      </label>`
+    ? `<input type="range" class="item-density" data-density="${type.id}" min="${min}" max="1" step="0.01" value="${type.density}" aria-label="Density"/>`
+    : '';
+  const densityVal = editable
+    ? `<span class="item-density-val">${Math.round(type.density * 100)}%</span>`
     : '<span class="item-density-val muted">—</span>';
 
   return `
-    <div class="item-row" data-id="${type.id}">
-      <span class="drag-handle" title="Reorder">☰</span>
-      <canvas class="item-preview" width="32" height="32" data-preview="${type.id}"></canvas>
-      <label class="item-enable"><input type="checkbox" data-enable="${type.id}" ${type.enabled ? 'checked' : ''}/></label>
-      <span class="item-name" title="${desc}">${type.name}</span>
-      ${densityControl}
-      <button type="button" class="icon-btn" data-edit="${type.id}">Edit</button>
-      <button type="button" class="icon-btn" data-up="${type.id}" ${idx === 0 ? 'disabled' : ''}>↑</button>
-      <button type="button" class="icon-btn" data-down="${type.id}" ${idx === total - 1 ? 'disabled' : ''}>↓</button>
-      <button type="button" class="icon-btn danger" data-delete="${type.id}">×</button>
+    <div class="item-row${type.enabled ? '' : ' is-disabled'}" data-id="${type.id}">
+      <span class="item-grip" data-grip="${type.id}" title="Drag to reorder" role="button" aria-label="Drag to reorder"></span>
+      <canvas class="item-preview" width="36" height="36" data-preview="${type.id}"></canvas>
+      <div class="item-body">
+        <div class="item-meta">
+          <label class="item-enable" title="${desc}">
+            <input type="checkbox" data-enable="${type.id}" ${type.enabled ? 'checked' : ''}/>
+            <span class="item-name">${type.name}</span>
+          </label>
+          ${densityVal}
+        </div>
+        ${densityControl}
+      </div>
+      <button type="button" class="item-edit" data-edit="${type.id}">Edit</button>
     </div>`;
 }
 
@@ -134,10 +128,7 @@ function renderList(
   const state = getState();
   const types = [...state.cellTypes].sort((a, b) => a.order - b.order);
 
-  list.innerHTML = `
-    <div class="type-section-header">Cell types</div>
-    ${types.map((t, idx) => renderTypeRow(t, idx, types.length)).join('')}
-  `;
+  list.innerHTML = types.map((t) => renderTypeRow(t)).join('');
 
   types.forEach((t) => {
     const preview = list.querySelector(`[data-preview="${t.id}"]`) as HTMLCanvasElement;
@@ -178,51 +169,93 @@ function renderList(
     });
   });
 
-  list.querySelectorAll('[data-delete]').forEach((el) => {
-    el.addEventListener('click', () => {
-      const id = (el as HTMLElement).dataset.delete!;
-      const s = getState();
-      if (s.cellTypes.length <= 1) return;
-      if (!confirm('Delete this cell type?')) return;
-      const cellTypes = redistributeDensities(s.cellTypes, id);
-      setState({
-        ...s,
-        cellTypes,
-      });
-      onChange();
-      renderList(container, getState, setState, onChange);
-    });
-  });
-
-  list.querySelectorAll('[data-up]').forEach((el) => {
-    el.addEventListener('click', () => moveType(container, getState, setState, onChange, (el as HTMLElement).dataset.up!, -1));
-  });
-
-  list.querySelectorAll('[data-down]').forEach((el) => {
-    el.addEventListener('click', () => moveType(container, getState, setState, onChange, (el as HTMLElement).dataset.down!, 1));
-  });
+  bindDragReorder(list, getState, setState, onChange);
 
   if (editId) renderEditor(container, getState, setState, onChange, editId);
 }
 
-function moveType(
+function bindDragReorder(
+  list: Element,
+  getState: () => AppState,
+  setState: (s: AppState) => void,
+  onChange: OnChange,
+): void {
+  list.querySelectorAll<HTMLElement>('.item-row').forEach((row) => {
+    const grip = row.querySelector<HTMLElement>('[data-grip]');
+    grip?.addEventListener('pointerdown', () => {
+      row.draggable = true;
+    });
+    grip?.addEventListener('pointerup', () => {
+      if (!row.classList.contains('is-dragging')) row.draggable = false;
+    });
+    row.addEventListener('dragstart', (e) => {
+      e.dataTransfer?.setData('text/plain', row.dataset.id ?? '');
+      e.dataTransfer?.setDragImage(row, 12, 12);
+      row.classList.add('is-dragging');
+    });
+    row.addEventListener('dragend', () => {
+      row.draggable = false;
+      row.classList.remove('is-dragging');
+      commitListOrder(list, getState, setState, onChange);
+    });
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const dragging = list.querySelector<HTMLElement>('.item-row.is-dragging');
+      if (!dragging || dragging === row) return;
+      const rect = row.getBoundingClientRect();
+      if (e.clientY > rect.top + rect.height / 2) row.after(dragging);
+      else row.before(dragging);
+    });
+    row.addEventListener('drop', (e) => e.preventDefault());
+  });
+}
+
+function commitListOrder(
+  list: Element,
+  getState: () => AppState,
+  setState: (s: AppState) => void,
+  onChange: OnChange,
+): void {
+  const ids = [...list.querySelectorAll<HTMLElement>('.item-row')].map((row) => row.dataset.id!);
+  const s = getState();
+  const current = [...s.cellTypes].sort((a, b) => a.order - b.order).map((t) => t.id);
+  if (ids.length !== current.length || ids.every((id, i) => id === current[i])) return;
+  const byId = new Map(s.cellTypes.map((t) => [t.id, t]));
+  const cellTypes = ids.flatMap((id, order) => {
+    const type = byId.get(id);
+    return type ? [{ ...type, order }] : [];
+  });
+  setState({ ...s, cellTypes: reindexOrders(cellTypes) });
+  onChange();
+}
+
+function closeEditor(overlay: HTMLElement): void {
+  overlay.classList.add('hidden');
+}
+
+function syncEditorPreview(id: string, getState: () => AppState): void {
+  const type = getState().cellTypes.find((t) => t.id === id);
+  const preview = document.getElementById('cellTypeEditorPreview') as HTMLCanvasElement | null;
+  if (!type || !preview) return;
+  renderCellPreview(preview, type);
+}
+
+function deleteCellType(
   container: HTMLElement,
   getState: () => AppState,
   setState: (s: AppState) => void,
   onChange: OnChange,
   id: string,
-  dir: number,
 ): void {
   const s = getState();
-  const sorted = [...s.cellTypes].sort((a, b) => a.order - b.order);
-  const idx = sorted.findIndex((t) => t.id === id);
-  const swapIdx = idx + dir;
-  if (swapIdx < 0 || swapIdx >= sorted.length) return;
-  const tmp = sorted[idx].order;
-  sorted[idx] = { ...sorted[idx], order: sorted[swapIdx].order };
-  sorted[swapIdx] = { ...sorted[swapIdx], order: tmp };
-  setState({ ...s, cellTypes: reindexOrders(sorted) });
+  if (s.cellTypes.length <= 1) return;
+  if (!confirm('Delete this cell type?')) return;
+  setState({
+    ...s,
+    cellTypes: redistributeDensities(s.cellTypes, id),
+  });
   onChange();
+  closeEditor(document.getElementById('cellTypeEditorOverlay')!);
   renderList(container, getState, setState, onChange);
 }
 
@@ -233,10 +266,11 @@ function renderEditor(
   onChange: OnChange,
   id: string,
 ): void {
-  const editor = container.querySelector('#cellTypeEditor')!;
   const type = getState().cellTypes.find((t) => t.id === id);
   if (!type) return;
 
+  const overlay = document.getElementById('cellTypeEditorOverlay')!;
+  const form = document.getElementById('cellTypeEditorForm')!;
   const editable = hasEditableDensity(type);
   const min = densityMinForType(type.id);
   const showBorderDepth =
@@ -245,16 +279,14 @@ function renderEditor(
   const borderDepthMax = type.id === TYPE_IDS.crosshatch ? 4 : 3;
   const borderDepthMin = type.id === TYPE_IDS.crosshatch ? 1 : 0;
 
-  editor.classList.remove('hidden');
-  editor.innerHTML = `
-    <h4>Edit: ${type.name}</h4>
-    <label>Name<input type="text" id="editName" value="${type.name}"/></label>
+  form.innerHTML = `
+    <label>Name<input type="text" id="editName"/></label>
     <label>Mode
       <select id="editMode">
         ${['none', 'mesh', 'fill', 'stroke', 'circle', 'hexagon', 'crosshatch', 'svg'].map((m) => `<option value="${m}" ${type.mode === m ? 'selected' : ''}>${m}</option>`).join('')}
       </select>
     </label>
-    <label>Density <span id="densityVal">${Math.round(type.density * 100)}%</span>
+    <label${showBorderDepth ? '' : ' class="editor-span-2"'}>Density <span id="densityVal">${Math.round(type.density * 100)}%</span>
       <input type="range" id="editDensity" min="${min}" max="1" step="0.01" value="${type.density}" ${editable ? '' : 'disabled'}/>
     </label>
     ${showBorderDepth ? `<label>Border depth <span id="borderDepthVal">${borderDepth}</span>
@@ -271,13 +303,16 @@ function renderEditor(
     <label>Circle radius<input type="range" id="editCircleR" min="0.1" max="0.49" step="0.01" value="${type.circleRadius}"/></label>
     <label>Hatch spacing<input type="number" id="editHatchSpace" min="2" max="20" value="${type.hatchSpacing}"/></label>
     <label>Hatch angle<input type="number" id="editHatchAngle" min="0" max="180" value="${type.hatchAngle}"/></label>
-    <div id="svgUploadSection" class="${type.mode === 'svg' ? '' : 'hidden'}">
+    <div id="svgUploadSection" class="${type.mode === 'svg' ? '' : 'hidden'} editor-span-2">
       <label class="file-label">Upload SVG (1×1 cell)
         <input type="file" id="editSvgUpload" accept=".svg"/>
       </label>
     </div>
-    <button type="button" id="closeEditor" class="secondary">Close</button>
+    <button type="button" id="deleteType" class="editor-delete"${getState().cellTypes.length <= 1 ? ' disabled' : ''}>Delete type</button>
   `;
+  (form.querySelector('#editName') as HTMLInputElement).value = type.name;
+
+  const refreshSidebar = () => renderList(container, getState, setState, onChange);
 
   const update = (patch: Partial<CellTypeDef>) => {
     const s = getState();
@@ -286,52 +321,54 @@ function renderEditor(
       cellTypes: s.cellTypes.map((t) => (t.id === id ? { ...t, ...patch } : t)),
     });
     onChange();
-    renderList(container, getState, setState, onChange, id);
+    refreshSidebar();
+    syncEditorPreview(id, getState);
   };
 
-  editor.querySelector('#editName')!.addEventListener('input', (e) =>
+  form.querySelector('#editName')!.addEventListener('input', (e) =>
     update({ name: (e.target as HTMLInputElement).value }),
   );
-  editor.querySelector('#editMode')!.addEventListener('change', (e) => {
+  form.querySelector('#editMode')!.addEventListener('change', (e) => {
     const mode = (e.target as HTMLSelectElement).value as CellTypeDef['mode'];
-    editor.querySelector('#svgUploadSection')!.classList.toggle('hidden', mode !== 'svg');
+    form.querySelector('#svgUploadSection')!.classList.toggle('hidden', mode !== 'svg');
     update({ mode });
   });
-  editor.querySelector('#editDensity')!.addEventListener('input', (e) => {
+  form.querySelector('#editDensity')!.addEventListener('input', (e) => {
     const density = parseFloat((e.target as HTMLInputElement).value);
-    (editor.querySelector('#densityVal') as HTMLElement).textContent = `${Math.round(density * 100)}%`;
+    (form.querySelector('#densityVal') as HTMLElement).textContent = `${Math.round(density * 100)}%`;
     applyDensityChange(getState, setState, id, density);
     onChange();
-    renderList(container, getState, setState, onChange, id);
+    refreshSidebar();
+    syncEditorPreview(id, getState);
   });
-  const borderDepthEl = editor.querySelector('#editBorderDepth') as HTMLInputElement | null;
+  const borderDepthEl = form.querySelector('#editBorderDepth') as HTMLInputElement | null;
   borderDepthEl?.addEventListener('input', (e) => {
-    const borderDepth = Math.round(parseFloat((e.target as HTMLInputElement).value));
-    (editor.querySelector('#borderDepthVal') as HTMLElement).textContent = String(borderDepth);
-    update({ borderDepth });
+    const borderDepthValue = Math.round(parseFloat((e.target as HTMLInputElement).value));
+    (form.querySelector('#borderDepthVal') as HTMLElement).textContent = String(borderDepthValue);
+    update({ borderDepth: borderDepthValue });
   });
-  editor.querySelector('#editFill')!.addEventListener('input', (e) =>
+  form.querySelector('#editFill')!.addEventListener('input', (e) =>
     update({ fill: (e.target as HTMLInputElement).value }),
   );
-  editor.querySelector('#editStroke')!.addEventListener('input', (e) =>
+  form.querySelector('#editStroke')!.addEventListener('input', (e) =>
     update({ stroke: (e.target as HTMLInputElement).value }),
   );
-  editor.querySelector('#editStrokeWidth')!.addEventListener('change', (e) =>
+  form.querySelector('#editStrokeWidth')!.addEventListener('change', (e) =>
     update({ strokeWidth: parseFloat((e.target as HTMLInputElement).value) }),
   );
-  editor.querySelector('#editColorApp')!.addEventListener('change', (e) =>
+  form.querySelector('#editColorApp')!.addEventListener('change', (e) =>
     update({ colorApplication: (e.target as HTMLSelectElement).value as CellTypeDef['colorApplication'] }),
   );
-  editor.querySelector('#editCircleR')!.addEventListener('input', (e) =>
+  form.querySelector('#editCircleR')!.addEventListener('input', (e) =>
     update({ circleRadius: parseFloat((e.target as HTMLInputElement).value) }),
   );
-  editor.querySelector('#editHatchSpace')!.addEventListener('change', (e) =>
+  form.querySelector('#editHatchSpace')!.addEventListener('change', (e) =>
     update({ hatchSpacing: parseInt((e.target as HTMLInputElement).value, 10) }),
   );
-  editor.querySelector('#editHatchAngle')!.addEventListener('change', (e) =>
+  form.querySelector('#editHatchAngle')!.addEventListener('change', (e) =>
     update({ hatchAngle: parseInt((e.target as HTMLInputElement).value, 10) }),
   );
-  editor.querySelector('#editSvgUpload')!.addEventListener('change', async (e) => {
+  form.querySelector('#editSvgUpload')!.addEventListener('change', async (e) => {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
     const t = getState().cellTypes.find((x) => x.id === id)!;
@@ -345,7 +382,11 @@ function renderEditor(
       alert('Failed to parse SVG');
     }
   });
-  editor.querySelector('#closeEditor')!.addEventListener('click', () => {
-    editor.classList.add('hidden');
+  form.querySelector('#deleteType')!.addEventListener('click', () => {
+    deleteCellType(container, getState, setState, onChange, id);
   });
+
+  overlay.classList.remove('hidden');
+  syncEditorPreview(id, getState);
+  (form.querySelector('#editName') as HTMLInputElement).focus();
 }
