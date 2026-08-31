@@ -1,10 +1,15 @@
 import {
   createDefaultCellType,
+  densityRole,
   hasEditableDensity,
   isNoiseBulkType,
+  mixDisplayPercents,
   normalizeBulkDensities,
+  randomizeCellTypeDensities,
+  resetCellTypeDensities,
   redistributeDensities,
   reindexOrders,
+  setBulkDensityShare,
 } from './cellTypes';
 import { renderCellPreview } from './renderCanvas';
 import { loadSvgIntoCache, parseSvgUpload, warnIfStorageLarge } from './svgSymbols';
@@ -14,22 +19,40 @@ import { TYPE_IDS } from './types';
 type OnChange = () => void;
 
 const TYPE_DESCRIPTIONS: Record<string, string> = {
-  [TYPE_IDS.grid]: 'Density — mesh cells in bulk regions (normalized with dot/hexagon/solid)',
-  [TYPE_IDS.dot]: 'Density — filled circles in bulk regions',
-  [TYPE_IDS.hexagon]: 'Density — filled hexagons in bulk regions',
-  [TYPE_IDS.solid]: 'Density — filled squares in bulk regions',
-  [TYPE_IDS.logo]: 'Density — border line where regions meet',
-  [TYPE_IDS.outline]: 'Density — outline band at region borders',
-  [TYPE_IDS.crosshatch]: 'Density — crosshatch band at region borders',
-  [TYPE_IDS.empty]: 'Density — empty void blobs in the noise field',
+  [TYPE_IDS.grid]: 'Mix share — patterned cells (Grid, Dot, Hexagon, Solid, and custom types add to 100%)',
+  [TYPE_IDS.dot]: 'Mix share — filled circles in patterned cells',
+  [TYPE_IDS.hexagon]: 'Mix share — filled hexagons in patterned cells',
+  [TYPE_IDS.solid]: 'Mix share — filled squares in patterned cells',
+  [TYPE_IDS.logo]: 'Edge chance — how often this mark appears on region borders',
+  [TYPE_IDS.outline]: 'Edge chance — outline band at region borders',
+  [TYPE_IDS.crosshatch]: 'Edge chance — crosshatch band at region borders',
+  [TYPE_IDS.empty]: 'Empty space — how much of the field is left open',
 };
 
+const DENSITY_TITLES = {
+  mix: 'Share of patterned cells',
+  empty: 'Empty space',
+  edge: 'Chance on region borders',
+} as const;
+
 function typeDescription(type: CellTypeDef): string {
-  return TYPE_DESCRIPTIONS[type.id] ?? 'Custom cell type';
+  return TYPE_DESCRIPTIONS[type.id] ?? 'Mix share — custom cell type';
 }
 
 function densityMinForType(id: string): number {
   return isNoiseBulkType(id) ? 0.01 : 0;
+}
+
+function formatDensityVal(id: string, pct: number): string {
+  const role = densityRole(id);
+  if (role === 'edge') return `${pct}% edge`;
+  if (role === 'empty') return `${pct}% empty`;
+  return `${pct}% mix`;
+}
+
+function densityPctForType(type: CellTypeDef, mixPct: Map<string, number>): number {
+  if (type.enabled && mixPct.has(type.id)) return mixPct.get(type.id)!;
+  return Math.round(type.density * 100);
 }
 
 function applyDensityChange(
@@ -42,8 +65,25 @@ function applyDensityChange(
   const updated = s.cellTypes.map((t) => (t.id === id ? { ...t, density } : t));
   setState({
     ...s,
-    cellTypes: isNoiseBulkType(id) ? normalizeBulkDensities(updated) : updated,
+    cellTypes: isNoiseBulkType(id) ? setBulkDensityShare(updated, id, density) : updated,
   });
+}
+
+function syncDensityDisplays(list: Element, types: CellTypeDef[], activeId?: string): void {
+  const mixPct = mixDisplayPercents(types);
+  for (const type of types) {
+    const row = list.querySelector(`[data-id="${type.id}"]`);
+    if (!row) continue;
+    const valEl = row.querySelector('.item-density-val');
+    const slider = row.querySelector<HTMLInputElement>('.item-density');
+    const pct = densityPctForType(type, mixPct);
+    if (valEl && !valEl.classList.contains('muted')) {
+      valEl.textContent = formatDensityVal(type.id, pct);
+    }
+    if (slider && type.id !== activeId) {
+      slider.value = String(type.density);
+    }
+  }
 }
 
 export function initCellTypeUi(
@@ -54,10 +94,32 @@ export function initCellTypeUi(
 ): { refresh: () => void } {
   container.innerHTML = `
     <div class="panel-actions">
+      <button type="button" id="randomizeDensities">Randomize mix</button>
+      <button type="button" id="resetDensities">Reset mix</button>
       <button type="button" id="addCellType">+ Add Type</button>
     </div>
     <div id="cellTypeList" class="item-list"></div>
   `;
+
+  container.querySelector('#randomizeDensities')!.addEventListener('click', () => {
+    const state = getState();
+    setState({
+      ...state,
+      cellTypes: randomizeCellTypeDensities(state.cellTypes),
+    });
+    onChange();
+    renderList(container, getState, setState, onChange);
+  });
+
+  container.querySelector('#resetDensities')!.addEventListener('click', () => {
+    const state = getState();
+    setState({
+      ...state,
+      cellTypes: resetCellTypeDensities(state.cellTypes),
+    });
+    onChange();
+    renderList(container, getState, setState, onChange);
+  });
 
   container.querySelector('#addCellType')!.addEventListener('click', () => {
     const state = getState();
@@ -88,15 +150,17 @@ export function initCellTypeUi(
   };
 }
 
-function renderTypeRow(type: CellTypeDef): string {
+function renderTypeRow(type: CellTypeDef, mixPct: Map<string, number>): string {
   const desc = typeDescription(type);
   const editable = hasEditableDensity(type);
   const min = densityMinForType(type.id);
+  const role = densityRole(type.id);
+  const pct = densityPctForType(type, mixPct);
   const densityControl = editable
-    ? `<input type="range" class="item-density" data-density="${type.id}" min="${min}" max="1" step="0.01" value="${type.density}" aria-label="Density"/>`
+    ? `<input type="range" class="item-density" data-density="${type.id}" min="${min}" max="1" step="0.01" value="${type.density}" aria-label="${DENSITY_TITLES[role]}"/>`
     : '';
   const densityVal = editable
-    ? `<span class="item-density-val">${Math.round(type.density * 100)}%</span>`
+    ? `<span class="item-density-val" title="${DENSITY_TITLES[role]}">${formatDensityVal(type.id, pct)}</span>`
     : '<span class="item-density-val muted">—</span>';
 
   return `
@@ -127,8 +191,9 @@ function renderList(
   const list = container.querySelector('#cellTypeList')!;
   const state = getState();
   const types = [...state.cellTypes].sort((a, b) => a.order - b.order);
+  const mixPct = mixDisplayPercents(types);
 
-  list.innerHTML = types.map((t) => renderTypeRow(t)).join('');
+  list.innerHTML = types.map((t) => renderTypeRow(t, mixPct)).join('');
 
   types.forEach((t) => {
     const preview = list.querySelector(`[data-preview="${t.id}"]`) as HTMLCanvasElement;
@@ -137,13 +202,19 @@ function renderList(
 
   list.querySelectorAll('[data-density]').forEach((el) => {
     el.addEventListener('input', (e) => {
-      const id = (e.target as HTMLInputElement).dataset.density!;
-      const density = parseFloat((e.target as HTMLInputElement).value);
-      const row = list.querySelector(`[data-id="${id}"]`);
-      const valEl = row?.querySelector('.item-density-val');
-      if (valEl) valEl.textContent = `${Math.round(density * 100)}%`;
+      const slider = e.target as HTMLInputElement;
+      const id = slider.dataset.density!;
+      const density = parseFloat(slider.value);
       applyDensityChange(getState, setState, id, density);
+      syncDensityDisplays(list, getState().cellTypes, id);
       onChange();
+    });
+    el.addEventListener('change', (e) => {
+      const slider = e.target as HTMLInputElement;
+      const id = slider.dataset.density!;
+      const type = getState().cellTypes.find((t) => t.id === id);
+      if (type) slider.value = String(type.density);
+      syncDensityDisplays(list, getState().cellTypes);
     });
   });
 
@@ -286,7 +357,7 @@ function renderEditor(
         ${['none', 'mesh', 'fill', 'stroke', 'circle', 'hexagon', 'crosshatch', 'svg'].map((m) => `<option value="${m}" ${type.mode === m ? 'selected' : ''}>${m}</option>`).join('')}
       </select>
     </label>
-    <label${showBorderDepth ? '' : ' class="editor-span-2"'}>Density <span id="densityVal">${Math.round(type.density * 100)}%</span>
+    <label${showBorderDepth ? '' : ' class="editor-span-2"'}>${DENSITY_TITLES[densityRole(type.id)]} <span id="densityVal">${formatDensityVal(type.id, densityPctForType(type, mixDisplayPercents(getState().cellTypes)))}</span>
       <input type="range" id="editDensity" min="${min}" max="1" step="0.01" value="${type.density}" ${editable ? '' : 'disabled'}/>
     </label>
     ${showBorderDepth ? `<label>Border depth <span id="borderDepthVal">${borderDepth}</span>
@@ -334,9 +405,16 @@ function renderEditor(
     update({ mode });
   });
   form.querySelector('#editDensity')!.addEventListener('input', (e) => {
-    const density = parseFloat((e.target as HTMLInputElement).value);
-    (form.querySelector('#densityVal') as HTMLElement).textContent = `${Math.round(density * 100)}%`;
+    const slider = e.target as HTMLInputElement;
+    const density = parseFloat(slider.value);
     applyDensityChange(getState, setState, id, density);
+    const latest = getState().cellTypes.find((t) => t.id === id);
+    if (latest) slider.value = String(latest.density);
+    const pct = densityPctForType(
+      latest ?? type,
+      mixDisplayPercents(getState().cellTypes),
+    );
+    (form.querySelector('#densityVal') as HTMLElement).textContent = formatDensityVal(id, pct);
     onChange();
     refreshSidebar();
     syncEditorPreview(id, getState);

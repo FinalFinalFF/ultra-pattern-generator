@@ -47,13 +47,11 @@ export function formatDuration(sec: number): string {
 export function resolveSeamlessExport(
   requestedSec: number,
   animation: AnimationParams,
-  loopSeamlessly: boolean,
 ): { durationSec: number; mode: ExportTimingMode; loopCount: number } {
-  if (!loopSeamlessly) {
+  const period = getLoopPeriod(animation);
+  if (period > requestedSec) {
     return { durationSec: requestedSec, mode: 'wall', loopCount: 0 };
   }
-
-  const period = getLoopPeriod(animation);
   const loopCount = Math.max(1, Math.round(requestedSec / period));
   return { durationSec: loopCount * period, mode: 'loop', loopCount };
 }

@@ -24,7 +24,7 @@ import {
 } from './animation';
 
 const STORAGE_KEY = 'gridPatternState';
-const STATE_VERSION = 64;
+const STATE_VERSION = 66;
 
 const REMOVED_COLOR_SCHEME_MAP: Record<string, ColorSchemeId> = {
   'color-field': 'random',
@@ -37,7 +37,7 @@ const REMOVED_COLOR_SCHEME_MAP: Record<string, ColorSchemeId> = {
   'pink-dark-on-light': 'pink-light-on-dark',
 };
 
-export const defaultShape3d: Shape3dParams = defaultShape3dForKind('sphere');
+export const defaultShape3d: Shape3dParams = defaultShape3dForKind('box');
 
 const SHAPE3D_KINDS = [
   'sphere',
@@ -58,6 +58,20 @@ function normalizeShape3dKind(kind: string | undefined): Shape3dParams['kind'] {
   return defaultShape3d.kind;
 }
 
+/** Previous factory default was a centered sphere at rotationY 25. */
+function isFactoryDefaultSphere(shape3d: Partial<Shape3dParams> | undefined): boolean {
+  if ((shape3d?.kind ?? 'sphere') !== 'sphere') return false;
+  const pos = shape3d?.position;
+  const nearZero = (n: number | undefined) => Math.abs(n ?? 0) < 0.05;
+  return (
+    nearZero(pos?.x) &&
+    nearZero(pos?.y) &&
+    nearZero(pos?.z) &&
+    Math.abs(shape3d?.rotationX ?? 0) < 0.5 &&
+    Math.abs((shape3d?.rotationY ?? 25) - 25) < 0.5
+  );
+}
+
 export const defaultShapeNoise = {
   scale: 0.019,
   octaves: 1,
@@ -65,7 +79,7 @@ export const defaultShapeNoise = {
 } as const;
 
 export const defaultState: AppState = {
-  seed: 'dusk-grid-204',
+  seed: 'ultra-wire-204',
   cols: 60,
   rows: 34,
   cellSize: 16,
@@ -80,7 +94,6 @@ export const defaultState: AppState = {
     animateColorBlocks: false,
   },
   cellTypes: applyColorScheme(getDefaultCellTypes(), 'mono'),
-  loopSeamlessly: true,
 };
 
 type LegacyCellType = CellTypeDef & { weight?: number };
@@ -372,6 +385,22 @@ function migrateState(parsed: Partial<AppState> & { stateVersion?: number }): Ap
   const cols = parsed.cols ?? defaultState.cols;
   const rows = parsed.rows ?? defaultState.rows;
 
+  let shape3d: Shape3dParams = {
+    kind: normalizeShape3dKind(parsed.shape3d?.kind),
+    position: {
+      x: parsed.shape3d?.position?.x ?? defaultShape3d.position.x,
+      y: parsed.shape3d?.position?.y ?? defaultShape3d.position.y,
+      z: parsed.shape3d?.position?.z ?? defaultShape3d.position.z,
+    },
+    scale: parsed.shape3d?.scale ?? defaultShape3d.scale,
+    rotationX: parsed.shape3d?.rotationX ?? defaultShape3d.rotationX,
+    rotationY: parsed.shape3d?.rotationY ?? defaultShape3d.rotationY,
+  };
+
+  if (version < 66 && isFactoryDefaultSphere(parsed.shape3d)) {
+    shape3d = { ...defaultShape3d };
+  }
+
   return {
     ...defaultState,
     seed,
@@ -385,20 +414,9 @@ function migrateState(parsed: Partial<AppState> & { stateVersion?: number }): Ap
     colorSchemeId,
     colorFieldSeed,
     shapeNoise: { ...defaultShapeNoise },
-    shape3d: {
-      kind: normalizeShape3dKind(parsed.shape3d?.kind),
-      position: {
-        x: parsed.shape3d?.position?.x ?? defaultShape3d.position.x,
-        y: parsed.shape3d?.position?.y ?? defaultShape3d.position.y,
-        z: parsed.shape3d?.position?.z ?? defaultShape3d.position.z,
-      },
-      scale: parsed.shape3d?.scale ?? defaultShape3d.scale,
-      rotationX: parsed.shape3d?.rotationX ?? defaultShape3d.rotationX,
-      rotationY: parsed.shape3d?.rotationY ?? defaultShape3d.rotationY,
-    },
+    shape3d,
     animation: migrateAnimation(parsed.animation, version),
     cellTypes,
-    loopSeamlessly: parsed.loopSeamlessly ?? defaultState.loopSeamlessly,
   };
 }
 

@@ -7,10 +7,11 @@ import {
   getColorScheme,
   isSeededScheme,
   resolvePaperColors,
+  schemeRerollsOnReselect,
   schemeSwatchStyle,
 } from './colorSchemes';
 import { getColorBlocksPhase, type ExportFrameSpec } from './animation';
-import { recordMp4, recordMp4Fallback } from './export';
+import { recordMp4 } from './export';
 import { generateGrid } from './generate';
 import { initPreviewChrome } from './previewChrome';
 import { renderToSvg, downloadSvg, downloadPng, copySvgToClipboard, copySvgMarkupToClipboard, rasterizeContextToCanvas, buildSvgMarkup } from './renderCanvas';
@@ -142,10 +143,6 @@ function applyActiveColorScheme(): void {
   state.cellTypes = applyColorScheme(state.cellTypes, state.colorSchemeId, activeColorFieldSeed());
   refreshColorFieldSwatch();
   refreshCellTypeUi();
-}
-
-function schemeRerollsOnReselect(id: ColorSchemeId): boolean {
-  return isSeededScheme(id) || id === 'color-blocks';
 }
 
 function setSeed(next: string): void {
@@ -337,22 +334,32 @@ function syncColorSchemeUi(): void {
   });
 }
 
+const REROLL_ICON = `<svg class="color-scheme-reroll-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+  <path d="M13.25 6.25A5.5 5.5 0 1 0 12.6 11.15"/>
+  <path d="M13.25 2.75v3.5h-3.5"/>
+</svg>`;
+
 function initColorSchemeControls(): void {
   const grid = document.getElementById('colorSchemeGrid')!;
-  grid.innerHTML = COLOR_SCHEMES.map(
-    (scheme) => `
+  grid.innerHTML = COLOR_SCHEMES.map((scheme) => {
+    const rerolls = schemeRerollsOnReselect(scheme.id);
+    const hint = rerolls ? `${scheme.name} — click again to shuffle` : scheme.name;
+    return `
       <button
         type="button"
-        class="color-scheme-btn"
+        class="color-scheme-btn${rerolls ? ' is-reroll' : ''}"
         data-color-scheme="${scheme.id}"
-        title="${scheme.name}"
-        aria-label="${scheme.name}"
+        title="${hint}"
+        aria-label="${hint}"
         aria-pressed="false"
       >
         <span class="color-scheme-swatch" style="background:${schemeSwatchStyle(scheme)}"></span>
-        <span class="color-scheme-label">${scheme.name}</span>
-      </button>`,
-  ).join('');
+        <span class="color-scheme-meta">
+          <span class="color-scheme-label">${scheme.name}</span>
+          ${rerolls ? REROLL_ICON : ''}
+        </span>
+      </button>`;
+  }).join('');
 
   grid.querySelectorAll<HTMLButtonElement>('[data-color-scheme]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -381,15 +388,11 @@ function render(time = shouldRunPreviewAnimation() ? smoothedTime : 0, forceGrid
 async function renderExportFrame(spec: ExportFrameSpec, animation: AnimationParams): Promise<void> {
   const exportGrid = generateGrid(buildGeneratorContext(spec.time, animation));
   const ctx: RenderContext = { ...buildRenderContext(spec.time, animation), grid: exportGrid };
-  await rasterizeContextToCanvas(recordCanvas, ctx);
+  await rasterizeContextToCanvas(recordCanvas, ctx, 1);
 }
 
 function parseRecordDurationSec(): number {
   return parseInt((document.getElementById('recordDuration') as HTMLSelectElement).value, 10);
-}
-
-function setAnimationLoopLength(loopLengthSec: number): void {
-  state.animation = { ...state.animation, loopLengthSec };
 }
 
 function exportAnimationParams(): AnimationParams {
@@ -437,7 +440,6 @@ function updateAnimationControls(): void {
   const colorBlocksAnim =
     usesColorBlocks(state.colorSchemeId) && state.animation.animateColorBlocks;
   const animDisabled = !patternAnim && !colorBlocksAnim;
-  (document.getElementById('loopLength') as HTMLSelectElement).disabled = animDisabled;
   (document.getElementById('animationSpeed') as HTMLInputElement).disabled = animDisabled;
   document.getElementById('animationPlayback')!.classList.toggle('is-disabled', animDisabled);
 
@@ -505,10 +507,8 @@ function syncUiFromState(): void {
   (document.getElementById('animationEnabled') as HTMLInputElement).checked = state.animation.enabled;
   (document.getElementById('animateColorBlocks') as HTMLInputElement).checked =
     state.animation.animateColorBlocks;
-  (document.getElementById('loopLength') as HTMLSelectElement).value = String(state.animation.loopLengthSec);
   syncRange('animationSpeed', 'animationSpeedVal', state.animation.speed, (v) => v.toFixed(2));
 
-  (document.getElementById('loopSeamlessly') as HTMLInputElement).checked = state.loopSeamlessly;
   updateModeControls();
   updateAnimationControls();
 }
@@ -651,17 +651,7 @@ function initControls(): void {
     saveState(state);
   });
 
-  document.getElementById('loopLength')!.addEventListener('change', (e) => {
-    setAnimationLoopLength(parseInt((e.target as HTMLSelectElement).value, 10));
-    debouncedRender();
-  });
-
   bindRange('animationSpeed', 'animationSpeedVal', () => state.animation.speed, (v) => { state.animation.speed = v; }, (v) => v.toFixed(2));
-
-  document.getElementById('loopSeamlessly')!.addEventListener('change', (e) => {
-    state.loopSeamlessly = (e.target as HTMLInputElement).checked;
-    saveState(state);
-  });
 
   document.getElementById('copyFigmaBtn')!.addEventListener('click', async () => {
     const btn = document.getElementById('copyFigmaBtn') as HTMLButtonElement;
@@ -734,27 +724,9 @@ function initControls(): void {
         onProgress,
         renderFrame,
         exportAnimation,
-        state.loopSeamlessly,
       );
-    } catch (primaryErr) {
-      console.warn('MP4 export failed, trying fallback recorder', primaryErr);
-      try {
-        await recordMp4Fallback(
-          recordCanvas,
-          duration,
-          fps,
-          onProgress,
-          renderFrame,
-          exportAnimation,
-          state.loopSeamlessly,
-        );
-      } catch (err) {
-        const detail =
-          primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
-        alert(
-          `Recording failed: ${err instanceof Error ? err.message : 'Unknown error'}\n\nEncoder error: ${detail}`,
-        );
-      }
+    } catch (err) {
+      alert(`Recording failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       exportInProgress = false;
       btn.disabled = false;

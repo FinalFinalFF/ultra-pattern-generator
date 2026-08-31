@@ -14,11 +14,11 @@
           <span class="topbar-product">Pattern Generator</span>
         </div>
         <div class="topbar-rule" aria-hidden="true"></div>
-        <button type="button" id="remixBtn" class="topbar-btn topbar-btn-primary">Remix</button>
+        <button type="button" id="remixBtn" class="topbar-btn topbar-btn-primary">Remix pattern</button>
         <button type="button" id="shuffleColorsBtn" class="topbar-btn">Shuffle colors</button>
         <div class="topbar-seed">
           <label for="seed" class="topbar-seed-label">Seed</label>
-          <input type="text" id="seed" value="dusk-grid-204" spellcheck="false" autocomplete="off" />
+          <input type="text" id="seed" value="ultra-wire-204" spellcheck="false" autocomplete="off" />
         </div>
         <div class="topbar-spacer"></div>
         <button type="button" id="savedOpenBtn" class="topbar-btn">Saved</button>
@@ -82,7 +82,7 @@
             <label>Shape
               <select id="shape3dKind">
                 <option value="sphere">Sphere</option>
-                <option value="box">Box</option>
+                <option value="box" selected>Box</option>
                 <option value="torus">Torus</option>
                 <option value="ring">Ribbon ring</option>
                 <option value="ringArc">Ribbon arc</option>
@@ -142,15 +142,6 @@
                   <span class="range-head">Speed <span id="animationSpeedVal" class="range-val">0.20</span></span>
                   <input type="range" id="animationSpeed" min="0.05" max="1" step="0.05" value="0.2" />
                 </label>
-                <label class="field-row">
-                  <span>Loop</span>
-                  <select id="loopLength">
-                    <option value="3">3s</option>
-                    <option value="5">5s</option>
-                    <option value="10" selected>10s</option>
-                    <option value="20">20s</option>
-                  </select>
-                </label>
               </div>
             </div>
             <div class="anim-group">
@@ -164,11 +155,7 @@
                   <option value="20">20s</option>
                 </select>
               </label>
-              <label class="toggle-row" title="Snaps export to whole loop cycles so the animation returns to the start frame naturally">
-                <span>Loop seamlessly</span>
-                <input type="checkbox" id="loopSeamlessly" checked />
-              </label>
-              <button type="button" id="recordMp4Btn">Record MP4</button>
+              <button type="button" id="recordMp4Btn">Download MP4</button>
               <div id="recordProgress" class="progress hidden">
                 <div class="progress-bar" id="progressBar"></div>
                 <span id="progressText"></span>

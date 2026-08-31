@@ -15,7 +15,7 @@ export interface CellTypeDef {
   name: string;
   enabled: boolean;
   order: number;
-  /** How often this type appears (0–1). Bulk types normalize together; border types are independent. */
+  /** Mix share (0–1, sums to 1 with other mix types), empty-space amount, or border chance. */
   density: number;
   mode: RenderMode;
   fill: string;
@@ -160,7 +160,6 @@ export interface AppState {
   shape3d: Shape3dParams;
   animation: AnimationParams;
   cellTypes: CellTypeDef[];
-  loopSeamlessly: boolean;
 }
 
 export interface GeneratorContext {

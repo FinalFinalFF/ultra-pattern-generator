@@ -6,12 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 npm install
-npm run dev        # copies ffmpeg core, then vite on :5173
-npm run build      # copy-ffmpeg → tsc (typecheck, noEmit) → vite build → dist/
+npm run dev        # vite on :5173
+npm run build      # tsc (typecheck, noEmit) → vite build → dist/
 npm run preview    # serve dist/
 ```
-
-`npm run copy-ffmpeg` (a prerequisite of both `dev` and `build`) copies `@ffmpeg/core` into `public/ffmpeg/`, which is gitignored. Without it MP4 export 404s at runtime — never skip it by running bare `vite`.
 
 There is no test framework. Invariants are checked by two headless verification scripts:
 
@@ -36,7 +34,7 @@ Vanilla TypeScript + Vite. No framework, no router, no component layer — one p
 AppState (localStorage)  →  GeneratorContext  →  generateGrid()  →  GridCell[][]
                          →  RenderContext     →  buildSvgMarkup()
                                                  ├─ renderToSvg()               → live preview
-                                                 └─ rasterizeContextToCanvas()  → MP4 frames
+                                                 └─ rasterizeContextToCanvas()  → MP4 frames (WebCodecs)
 ```
 
 `src/types.ts` defines all three context shapes and is the place to start when tracing anything. `AppState` is the persisted shape; `GeneratorContext` and `RenderContext` are per-frame derivations built in `main.ts` (`buildGeneratorContext`, `buildRenderContext`).
@@ -59,10 +57,11 @@ Only `pattern` mode animates the grid itself (`shouldAnimatePattern`); color-blo
 
 Density has two distinct meanings (`src/cellTypes.ts`):
 
-- `NOISE_BULK_IDS` — densities are **normalized to sum to 1** and become noise thresholds (`densitiesToThresholds` / `classifyNoise`). Changing one redistributes the others (`redistributeDensities`).
-- `BORDER_ZONE_IDS` (outline, crosshatch, logo) — **independent 0–1 probabilities** applied by `accentPlacement.ts` only within `borderDepth` cells of a region boundary. These types are not noise-assigned.
+- **Mix** (`isNoiseBulkType` — grid, dot, hexagon, solid, and custom types) — densities are a **share of patterned cells** and always sum to 1 among enabled mix types. Dragging one lock-sets that share via `setBulkDensityShare` and scales the others. `randomizeCellTypeDensities` re-rolls the mix (and enabled empty/edge amounts).
+- **Empty** (void) — independent 0–1 share of the field left open. `1` is a fully empty canvas.
+- **Edge** (`BORDER_ZONE_IDS`: outline, crosshatch, logo) — **independent 0–1 probabilities** applied by `accentPlacement.ts` only within `borderDepth` cells of a region boundary. These types are not noise-assigned.
 
-Anything that mutates bulk densities must re-run `normalizeBulkDensities`. `cellTypes.ts` keeps several `@deprecated` aliases (`normalizeWeights`, `weightsToThresholds`, `patchAccentCellTypes`, …) — use the current names in new code.
+Anything that mutates bulk densities must re-run `normalizeBulkDensities` or `setBulkDensityShare`. `cellTypes.ts` keeps several `@deprecated` aliases (`normalizeWeights`, `weightsToThresholds`, `patchAccentCellTypes`, …) — use the current names in new code.
 
 ### Colors live on cell types, not in the scheme
 
@@ -74,7 +73,7 @@ Phase is always derived (`getAnimationPhase(time, animation)` = `time * rate`), 
 
 ### State persistence and migration
 
-`state.ts` persists `AppState` to `localStorage` under `gridPatternState` with `STATE_VERSION` (currently 64). `migrateState()` is a long chain of `if (version < N)` blocks that patch older saved states — cell type sets, renamed color schemes (`REMOVED_COLOR_SCHEME_MAP`), animation speed rescaling.
+`state.ts` persists `AppState` to `localStorage` under `gridPatternState` with `STATE_VERSION` (currently 66). `migrateState()` is a long chain of `if (version < N)` blocks that patch older saved states — cell type sets, renamed color schemes (`REMOVED_COLOR_SCHEME_MAP`), animation speed rescaling.
 
 **Any change to `AppState`, default cell types, or color scheme ids requires bumping `STATE_VERSION` and adding a migration block**, or users with saved state get a broken or stale config. Migrations that touch bulk densities must end with `normalizeBulkDensities`.
 

@@ -1,4 +1,11 @@
-import { getFillInset, getLogoSvgScale, getSvgScale, isGridLineCell, isMeshMode } from './cellTypes';
+import {
+  getFillInset,
+  getLogoSvgScale,
+  getSvgScale,
+  isGridLineCell,
+  isMeshMode,
+  scaledStrokeWidth,
+} from './cellTypes';
 import { hexagonSvgPoints, traceHexagonPath } from './hexagon';
 import {
   crosshatchCellToSvg,
@@ -290,11 +297,11 @@ export function renderCellPreview(
     c.fillRect(m, m, size - 2 * m, size - 2 * m);
   } else if (type.mode === 'mesh') {
     c.strokeStyle = colors.stroke;
-    c.lineWidth = type.strokeWidth;
+    c.lineWidth = scaledStrokeWidth(size, type.strokeWidth);
     c.strokeRect(0.5, 0.5, size - 1, size - 1);
   } else if (type.mode === 'stroke') {
     c.strokeStyle = colors.stroke;
-    c.lineWidth = type.strokeWidth;
+    c.lineWidth = scaledStrokeWidth(size, type.strokeWidth);
     c.strokeRect(0.5, 0.5, size - 1, size - 1);
   } else if (type.mode === 'crosshatch') {
     drawCrosshatchCell(c, 0, 0, size, type, colors.stroke);

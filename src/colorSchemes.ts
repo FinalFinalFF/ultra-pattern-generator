@@ -310,6 +310,11 @@ export function isSeededScheme(id: ColorSchemeId): boolean {
   return SEEDED_SCHEME_GENERATORS.has(id);
 }
 
+/** Palette or block layout re-rolls when the already-selected scheme is clicked again. */
+export function schemeRerollsOnReselect(id: ColorSchemeId): boolean {
+  return isSeededScheme(id) || id === 'color-blocks';
+}
+
 export function colorFieldSeedForState(
   schemeId: ColorSchemeId,
   patternSeed: string,

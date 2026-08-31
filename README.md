@@ -21,7 +21,7 @@ npm run preview    # serve production build locally
 - **Cell type editor** — add, edit, remove, reorder types; parametric modes or custom SVG upload
 - **3D shapes mode** — ray-traced SDF scene mapped to cell types (experimental)
 - **SVG export** — clean vector output
-- **MP4 recording** — frame capture + ffmpeg.wasm conversion
+- **MP4 recording** — frame capture encoded in the browser via WebCodecs
 - **Settings persist** in localStorage
 
 ## Deploy to Netlify
@@ -37,8 +37,7 @@ Netlify can provision and renew its own TLS certificate.
 
 ## Browser support
 
-- Chrome / Firefox / Edge — full support including MP4 export
-- Safari — pattern generation and SVG export; MP4 may require ffmpeg.wasm load
+- Chrome / Firefox / Edge / Safari — full support including MP4 export
 
 ## Project structure
 
@@ -70,12 +69,12 @@ src/
 
   renderCanvas.ts     SVG markup (source of truth), canvas rasterize, SVG download
   previewChrome.ts    Preview zoom, fit, and pixel-size readout
-  seedNames.ts        Short adjective-noun-number seed names
+  seedNames.ts        Short Ultra Security adjective-noun-number seed names
   savedPatterns.ts    Saved pattern list in localStorage
   meshLines.ts        Shared-edge grid line collection
   hatch.ts            Hatch, outline, and crosshatch cell drawing
   hexagon.ts          Hexagon geometry
-  export.ts           MP4 recording via ffmpeg.wasm
+  export.ts           MP4 recording via WebCodecs + Mediabunny
 
   colorSchemes.ts     Scheme definitions + seeded palette generators
   brandColors.ts      Brand palette, shade ramps, contrast math

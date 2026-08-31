@@ -1,20 +1,20 @@
 const ADJECTIVES = [
-  'dusk', 'neon', 'quiet', 'brine', 'amber', 'frost', 'velvet', 'rust',
-  'pale', 'vivid', 'hollow', 'sharp', 'mist', 'ember', 'slate', 'coral',
-  'moss', 'ion', 'lunar', 'grain', 'silk', 'oxide', 'tidal', 'bloom',
+  'ultra', 'agent', 'inline', 'live', 'wired', 'host', 'closed', 'traced',
+  'scoped', 'keyed', 'signed', 'gated', 'synced', 'local', 'native', 'sealed',
+  'proxy', 'mcp', 'blunt', 'runtime', 'attested', 'pinned', 'hashed', 'named',
 ] as const;
 
 const NOUNS = [
-  'zone', 'grid', 'drift', 'field', 'vault', 'ridge', 'pulse', 'kiln',
-  'fold', 'arc', 'mesh', 'well', 'coil', 'dune', 'rift', 'knot',
-  'haze', 'dock', 'spool', 'gleam', 'notch', 'flare', 'wisp', 'core',
+  'wire', 'hub', 'proxy', 'agent', 'tool', 'guard', 'audit', 'policy',
+  'trace', 'span', 'call', 'rule', 'sprawl', 'prompt', 'nonce', 'plane',
+  'surface', 'fleet', 'sync', 'log', 'gate', 'stream', 'token', 'rail',
 ] as const;
 
 function pick<T>(items: readonly T[]): T {
   return items[Math.floor(Math.random() * items.length)]!;
 }
 
-/** Short seed like `dusk-zone-250`. */
+/** Short seed like `ultra-wire-204`. */
 export function randomSeedName(): string {
   const n = 100 + Math.floor(Math.random() * 900);
   return `${pick(ADJECTIVES)}-${pick(NOUNS)}-${n}`;

@@ -1,4 +1,9 @@
-import { isGridLineCell, isMeshGutterNeighbor, isVoidAdjacent } from './cellTypes';
+import {
+  isGridLineCell,
+  isMeshGutterNeighbor,
+  isVoidAdjacent,
+  scaledStrokeWidth,
+} from './cellTypes';
 import { applyShadeVisualScale } from './shapes3dVisual';
 import type { CellTypeDef, GridCell } from './types';
 
@@ -116,6 +121,7 @@ export function collectMeshLines(
   const segments = new Map<string, LineSegment>();
   const buffer = getMeshBuffer(cellSize);
   const minLen = cellSize * 0.12;
+  const defaultWidth = scaledStrokeWidth(cellSize, strokeWidth);
 
   const addSeg = (
     x1: number,
@@ -123,7 +129,7 @@ export function collectMeshLines(
     x2: number,
     y2: number,
     segStroke = stroke,
-    segWidth = strokeWidth,
+    segWidth = defaultWidth,
   ) => {
     const key = segKey(x1, y1, x2, y2);
     const existing = segments.get(key);
@@ -148,7 +154,7 @@ export function collectMeshLines(
       const segStroke = resolveStroke
         ? resolveStroke(col, row, cell, type!)
         : type!.stroke;
-      const segWidth = type!.strokeWidth;
+      const segWidth = scaledStrokeWidth(cellSize, type!.strokeWidth);
 
       if (!(flags.left && flags.right)) {
         addHorizontal(

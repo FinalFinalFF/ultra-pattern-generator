@@ -2,7 +2,7 @@ import type { CellTypeDef, GridCell, WeightedItem } from './types';
 import { TYPE_IDS } from './types';
 import { LOGO_SVG_MARKUP, LOGO_SVG_VIEWBOX, LOGO_SYMBOL_ID } from './logoCell';
 
-/** Types assigned by noise (densities normalized together). */
+/** Built-in types assigned by noise (densities normalized together). */
 export const NOISE_BULK_IDS = new Set<string>([
   TYPE_IDS.grid,
   TYPE_IDS.dot,
@@ -17,12 +17,22 @@ export const BORDER_ZONE_IDS = new Set<string>([
   TYPE_IDS.outline,
 ]);
 
-export function isNoiseBulkType(id: string): boolean {
-  return NOISE_BULK_IDS.has(id);
-}
+/** Mix share vs empty-space amount vs border chance. */
+export type DensityRole = 'mix' | 'empty' | 'edge';
 
 export function isBorderZoneType(id: string): boolean {
   return BORDER_ZONE_IDS.has(id);
+}
+
+/** Noise-assigned mix types: built-ins plus user-created types. */
+export function isNoiseBulkType(id: string): boolean {
+  return !isBorderZoneType(id) && id !== TYPE_IDS.empty;
+}
+
+export function densityRole(id: string): DensityRole {
+  if (id === TYPE_IDS.empty) return 'empty';
+  if (isBorderZoneType(id)) return 'edge';
+  return 'mix';
 }
 
 export function hasEditableDensity(_type: CellTypeDef): boolean {
@@ -205,6 +215,23 @@ export function getDefaultCellTypes(): CellTypeDef[] {
   ];
 }
 
+/** `strokeWidth` / `hatchSpacing` on a type are designed for this cell size. */
+export const STROKE_REFERENCE_CELL_SIZE = 16;
+
+/** Hairline floor so 4px cells still rasterize a visible stroke. */
+const MIN_SCALED_STROKE = 0.35;
+const MIN_SCALED_HATCH_SPACING = 0.75;
+
+/** Pixel stroke at `cellSize`, keeping the same weight as `strokeWidth` at 16px cells. */
+export function scaledStrokeWidth(cellSize: number, strokeWidth: number): number {
+  return Math.max(MIN_SCALED_STROKE, strokeWidth * (cellSize / STROKE_REFERENCE_CELL_SIZE));
+}
+
+/** Hatch line spacing at `cellSize`, matching `hatchSpacing` at 16px cells. */
+export function scaledHatchSpacing(cellSize: number, hatchSpacing: number): number {
+  return Math.max(MIN_SCALED_HATCH_SPACING, hatchSpacing * (cellSize / STROKE_REFERENCE_CELL_SIZE));
+}
+
 /** Render scale for SVG cell types (fraction of cell size, centered). */
 export function getSvgScale(type: CellTypeDef): number {
   const scale = type.circleRadius ?? 0.46;
@@ -241,6 +268,8 @@ export function createDefaultCellType(order: number): CellTypeDef {
   };
 }
 
+const MIX_MIN_SHARE = 0.01;
+
 export function normalizeBulkDensities<T extends WeightedItem>(items: T[]): T[] {
   const bulk = items.filter((i) => isNoiseBulkType(i.id) && i.enabled);
   const total = bulk.reduce((s, i) => s + i.density, 0);
@@ -250,6 +279,85 @@ export function normalizeBulkDensities<T extends WeightedItem>(items: T[]): T[] 
       ? { ...item, density: item.density / total }
       : item,
   );
+}
+
+/** Lock one mix type at `share` and scale the other enabled mix types to fill the rest. */
+export function setBulkDensityShare<T extends WeightedItem>(
+  items: T[],
+  id: string,
+  share: number,
+): T[] {
+  const bulk = items.filter((i) => isNoiseBulkType(i.id) && i.enabled);
+  if (!bulk.some((i) => i.id === id)) {
+    return items.map((item) => (item.id === id ? { ...item, density: share } : item));
+  }
+
+  const others = bulk.filter((i) => i.id !== id);
+  if (others.length === 0) {
+    return items.map((item) => (item.id === id ? { ...item, density: 1 } : item));
+  }
+
+  const clamped = Math.min(1 - MIX_MIN_SHARE * others.length, Math.max(MIX_MIN_SHARE, share));
+  const rest = 1 - clamped;
+  const otherTotal = others.reduce((s, i) => s + i.density, 0);
+
+  return items.map((item) => {
+    if (item.id === id) return { ...item, density: clamped };
+    if (!isNoiseBulkType(item.id) || !item.enabled) return item;
+    const weight = otherTotal > 0 ? item.density / otherTotal : 1 / others.length;
+    return { ...item, density: rest * weight };
+  });
+}
+
+/** Integer percents for enabled mix types that always sum to 100. */
+export function mixDisplayPercents(items: WeightedItem[]): Map<string, number> {
+  const mix = items.filter((i) => i.enabled && isNoiseBulkType(i.id) && i.density > 0);
+  const result = new Map<string, number>();
+  if (mix.length === 0) return result;
+
+  const total = mix.reduce((s, i) => s + i.density, 0);
+  const parts = mix.map((item) => {
+    const exact = (item.density / total) * 100;
+    const floor = Math.floor(exact);
+    return { id: item.id, floor, frac: exact - floor };
+  });
+  const leftover = Math.max(0, 100 - parts.reduce((s, p) => s + p.floor, 0));
+  const byFrac = [...parts].sort((a, b) => b.frac - a.frac || a.id.localeCompare(b.id));
+  const extra = new Set(byFrac.slice(0, leftover).map((p) => p.id));
+  for (const part of parts) {
+    result.set(part.id, part.floor + (extra.has(part.id) ? 1 : 0));
+  }
+  return result;
+}
+
+function randUnit(): number {
+  return Math.random() || Number.EPSILON;
+}
+
+/** Fresh mix shares (sum 100%) plus new independent empty/edge amounts for enabled types. */
+export function randomizeCellTypeDensities<T extends WeightedItem>(items: T[]): T[] {
+  const next = items.map((item) => {
+    if (!item.enabled) return item;
+    const role = densityRole(item.id);
+    if (role === 'mix') {
+      return { ...item, density: -Math.log(randUnit()) };
+    }
+    if (role === 'empty') {
+      return { ...item, density: 0.05 + randUnit() * 0.35 };
+    }
+    return { ...item, density: 0.2 + randUnit() * 0.8 };
+  });
+  return normalizeBulkDensities(next);
+}
+
+/** Restore factory mix / empty / edge amounts. Custom types keep their current share, then mix is renormalized. */
+export function resetCellTypeDensities<T extends WeightedItem>(items: T[]): T[] {
+  const defaultById = new Map(getDefaultCellTypes().map((d) => [d.id, d.density]));
+  const next = items.map((item) => {
+    const density = defaultById.get(item.id);
+    return density == null ? item : { ...item, density };
+  });
+  return normalizeBulkDensities(next);
 }
 
 /** @deprecated Use normalizeBulkDensities */

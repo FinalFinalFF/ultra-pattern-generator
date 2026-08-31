@@ -1,3 +1,4 @@
+import { scaledHatchSpacing, scaledStrokeWidth } from './cellTypes';
 import type { CellTypeDef } from './types';
 
 export function drawHatchLines(
@@ -70,7 +71,7 @@ export function drawOutlineSquare(
   const inset = (size * (1 - type.circleRadius)) / 2;
   const s = size - inset * 2;
   ctx.strokeStyle = stroke;
-  ctx.lineWidth = type.strokeWidth;
+  ctx.lineWidth = scaledStrokeWidth(size, type.strokeWidth);
   ctx.strokeRect(x + inset + 0.5, y + inset + 0.5, s - 1, s - 1);
 }
 
@@ -85,7 +86,8 @@ export function outlineSquareToSvg(
   const y = row * cellSize;
   const inset = (cellSize * (1 - type.circleRadius)) / 2;
   const s = cellSize - inset * 2;
-  return `<rect x="${x + inset}" y="${y + inset}" width="${s}" height="${s}" fill="none" stroke="${stroke}" stroke-width="${type.strokeWidth}"/>`;
+  const sw = scaledStrokeWidth(cellSize, type.strokeWidth);
+  return `<rect x="${x + inset}" y="${y + inset}" width="${s}" height="${s}" fill="none" stroke="${stroke}" stroke-width="${sw}"/>`;
 }
 
 export function drawCrosshatchCell(
@@ -101,10 +103,11 @@ export function drawCrosshatchCell(
   const iy = y + m;
   const w = size - 2 * m;
   const h = size - 2 * m;
-  const spacing = type.hatchSpacing ?? 4;
+  const spacing = scaledHatchSpacing(size, type.hatchSpacing ?? 4);
   const angle = type.hatchAngle ?? 45;
-  drawHatchLines(ctx, ix, iy, w, h, spacing, angle, stroke, type.strokeWidth);
-  drawHatchLines(ctx, ix, iy, w, h, spacing, angle + 90, stroke, type.strokeWidth);
+  const sw = scaledStrokeWidth(size, type.strokeWidth);
+  drawHatchLines(ctx, ix, iy, w, h, spacing, angle, stroke, sw);
+  drawHatchLines(ctx, ix, iy, w, h, spacing, angle + 90, stroke, sw);
 }
 
 export function crosshatchCellToSvg(
@@ -120,10 +123,11 @@ export function crosshatchCellToSvg(
   const w = cellSize - 2 * m;
   const h = cellSize - 2 * m;
   const clipId = `hatch-${col}-${row}`;
-  const spacing = type.hatchSpacing ?? 4;
+  const spacing = scaledHatchSpacing(cellSize, type.hatchSpacing ?? 4);
   const angle = type.hatchAngle ?? 45;
+  const sw = scaledStrokeWidth(cellSize, type.strokeWidth);
   const lines =
-    hatchLineElements(x + m, y + m, w, h, spacing, angle, stroke, type.strokeWidth) +
-    hatchLineElements(x + m, y + m, w, h, spacing, angle + 90, stroke, type.strokeWidth);
+    hatchLineElements(x + m, y + m, w, h, spacing, angle, stroke, sw) +
+    hatchLineElements(x + m, y + m, w, h, spacing, angle + 90, stroke, sw);
   return `<clipPath id="${clipId}"><rect x="${x + m}" y="${y + m}" width="${w}" height="${h}"/></clipPath><g clip-path="url(#${clipId})">${lines}</g>`;
 }

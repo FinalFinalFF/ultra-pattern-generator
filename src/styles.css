@@ -710,11 +710,36 @@ input[type='checkbox']:checked {
   border: 1px solid var(--ff-border-default);
 }
 
+.color-scheme-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
 .color-scheme-label {
   font-size: 11px;
   line-height: 1.25;
   color: var(--ff-ink) !important;
   font-weight: 400;
+}
+
+.color-scheme-reroll-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  color: var(--ff-ink-40);
+  stroke-width: 1.4;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+}
+
+.section-body .color-scheme-btn:hover .color-scheme-reroll-icon,
+.section-body .color-scheme-btn.active .color-scheme-reroll-icon {
+  color: var(--ff-ink);
 }
 
 .preview-area {
@@ -991,10 +1016,11 @@ input[type='checkbox']:checked {
   font-weight: 400;
   letter-spacing: 0.02em;
   color: var(--ff-text-muted);
-  min-width: 2.4em;
+  min-width: 10ch;
   text-align: right;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .item-density-val.muted {

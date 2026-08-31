@@ -9,7 +9,6 @@ type TypeMap = Map<string, CellTypeDef>;
 
 const SMALL_VOID_MAX = 6;
 const BULK_SPECKLE_PASSES = 2;
-const MAX_VOID_FRACTION = 0.45;
 
 const NEIGHBOR_DELTAS = [
   [0, -1],
@@ -146,11 +145,17 @@ function removeIsolatedBulkSpeckle(grid: GridCell[][], cols: number, rows: numbe
   return result;
 }
 
-/** Safety net — never leave the canvas mostly empty. */
-function capExcessiveVoid(grid: GridCell[][], cols: number, rows: number): GridCell[][] {
+/** Fill void cells back to neighbors when they exceed the void slider. */
+function capExcessiveVoid(
+  grid: GridCell[][],
+  cols: number,
+  rows: number,
+  maxFraction: number,
+): GridCell[][] {
   const total = cols * rows;
   if (total === 0) return grid;
 
+  const maxVoid = Math.floor(total * Math.min(1, Math.max(0, maxFraction)));
   let voidCount = 0;
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
@@ -158,7 +163,6 @@ function capExcessiveVoid(grid: GridCell[][], cols: number, rows: number): GridC
     }
   }
 
-  const maxVoid = Math.floor(total * MAX_VOID_FRACTION);
   if (voidCount <= maxVoid) return grid;
 
   const result = cloneGrid(grid);
@@ -204,11 +208,17 @@ export function applyAdjacencyPostProcess(
   const typeMap: TypeMap = new Map(cellTypes.map((t) => [t.id, t]));
   const cols = grid[0]?.length ?? 0;
   const rows = grid.length;
+  const voidType = typeMap.get(TYPE_IDS.empty);
+  const maxVoidFraction = voidType?.enabled
+    ? Math.min(1, Math.max(0, voidType.density))
+    : 0;
 
   let result = fillEmptyCells(grid, typeMap);
   if (cols > 0 && rows > 0) {
-    result = mergeSmallVoidIslands(result, cols, rows);
-    result = capExcessiveVoid(result, cols, rows);
+    if (maxVoidFraction < 0.995) {
+      result = mergeSmallVoidIslands(result, cols, rows);
+      result = capExcessiveVoid(result, cols, rows, maxVoidFraction);
+    }
     result = removeIsolatedBulkSpeckle(result, cols, rows);
   }
   return result;

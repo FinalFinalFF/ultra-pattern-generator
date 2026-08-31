@@ -22,18 +22,11 @@ function smoothstep(t: number): number {
 const REGIONAL_WEIGHT = 0.92;
 const WAVE_WEIGHT = 1 - REGIONAL_WEIGHT;
 
-/** Low-frequency void field — white-space blobs; amount controlled by void type density. */
+/** Low-frequency void field — white-space blobs; amount is the void type density. */
 const VOID_SCALE_MULT = 0.36;
 
-/** Target combined void-zone share (empty core + grid fringe) from density slider. */
-function targetVoidZoneFraction(voidDensity: number): number {
-  // ~19% at default density 0.22
-  return Math.min(0.38, Math.max(0.08, voidDensity * 0.88));
-}
-
-/** Share of void zone assigned to pure empty vs textured grid fringe. */
-const VOID_EMPTY_SHARE = 0.35;
-const VOID_GRID_FRINGE_SHARE = 0.65;
+/** Grid halo around empty blobs, as a fraction of the empty area — shrinks as void approaches 100%. */
+const VOID_FRINGE_RATIO = 0.25;
 
 /** Hexagon only in mid-density transition band (regional score quantiles). */
 const HEX_DENSITY_MIN = 0.35;
@@ -78,6 +71,8 @@ function voidScore(
 
 function percentileThreshold(sortedAsc: number[], fraction: number): number {
   if (sortedAsc.length === 0) return 1;
+  if (fraction >= 1) return Number.NEGATIVE_INFINITY;
+  if (fraction <= 0) return Infinity;
   const idx = Math.min(
     sortedAsc.length - 1,
     Math.floor((1 - fraction) * sortedAsc.length),
@@ -91,14 +86,13 @@ function adaptiveVoidThresholds(
 ): { emptyCutoff: number; gridCutoff: number } {
   if (scores.length === 0) return { emptyCutoff: Infinity, gridCutoff: Infinity };
 
-  const total = targetVoidZoneFraction(voidDensity);
-  const emptyTarget = total * VOID_EMPTY_SHARE;
-  const gridTarget = total * VOID_GRID_FRINGE_SHARE;
+  const emptyTarget = Math.min(1, Math.max(0, voidDensity));
+  const fringeTarget = Math.min(1 - emptyTarget, emptyTarget * VOID_FRINGE_RATIO);
   const sorted = [...scores].sort((a, b) => a - b);
 
   return {
     emptyCutoff: percentileThreshold(sorted, emptyTarget),
-    gridCutoff: percentileThreshold(sorted, emptyTarget + gridTarget),
+    gridCutoff: percentileThreshold(sorted, emptyTarget + fringeTarget),
   };
 }
 
@@ -178,6 +172,9 @@ export function assignShapeTypesNoise(
   const voidType = cellTypes.find((t) => t.id === TYPE_IDS.empty);
   const voidEnabled = !!voidType?.enabled;
   const voidDensity = voidEnabled ? Math.min(1, Math.max(0, voidType?.density ?? 0)) : 0;
+  if (voidEnabled && voidDensity >= 0.995) {
+    return Array.from({ length: rows }, () => Array.from({ length: cols }, () => TYPE_IDS.empty));
+  }
   const typeGrid: string[][] = [];
 
   const voidScores: number[][] = [];
