@@ -3,7 +3,6 @@ import {
   getLogoSvgScale,
   getSvgScale,
   isGridLineCell,
-  isMeshMode,
   scaledStrokeWidth,
 } from './cellTypes';
 import { hexagonSvgPoints, traceHexagonPath } from './hexagon';
@@ -15,7 +14,6 @@ import { applyShadeVisualScale } from './shapes3dVisual';
 import { getSvgCache, svgMarkupForType, svgViewBoxForType } from './svgSymbols';
 import {
   collectMeshLines,
-  drawSegments,
   segmentsToSvgLines,
 } from './meshLines';
 import type {
@@ -23,21 +21,9 @@ import type {
   ColorBlock,
   GridCell,
   RenderContext,
-  RenderMode,
   ResolvedColors,
 } from './types';
 import { TYPE_IDS } from './types';
-
-function drawColorBlocks(
-  c: CanvasRenderingContext2D,
-  blocks: ColorBlock[],
-  cellSize: number,
-): void {
-  for (const block of blocks) {
-    c.fillStyle = block.color;
-    c.fillRect(block.col * cellSize, block.row * cellSize, block.cols * cellSize, block.rows * cellSize);
-  }
-}
 
 function colorBlocksSvg(blocks: ColorBlock[], cellSize: number): string {
   return blocks
@@ -110,163 +96,6 @@ function svgSymbolInstance(
   const tx = cellX + ox;
   const ty = cellY + oy;
   return `<svg x="${tx}" y="${ty}" width="${s}" height="${s}" viewBox="${vb}" overflow="hidden" color="${stroke}"><use href="#${id}" xlink:href="#${id}" width="${vbW}" height="${vbH}"/></svg>`;
-}
-
-export function renderToCanvas(
-  canvas: HTMLCanvasElement,
-  ctx: RenderContext,
-  svgCache: Map<string, HTMLImageElement>,
-  dpr = window.devicePixelRatio || 1,
-): void {
-  const { grid, cellTypes, cellSize, cols, rows } = ctx;
-  const w = cols * cellSize;
-  const h = rows * cellSize;
-  canvas.width = w * dpr;
-  canvas.height = h * dpr;
-  canvas.style.width = `${w}px`;
-  canvas.style.height = `${h}px`;
-
-  const c = canvas.getContext('2d');
-  if (!c) return;
-  c.setTransform(dpr, 0, 0, dpr, 0, 0);
-  c.imageSmoothingEnabled = false;
-
-  c.fillStyle = ctx.paper;
-  if (ctx.colorBlocks?.length) {
-    drawColorBlocks(c, ctx.colorBlocks, cellSize);
-  } else {
-    c.fillRect(0, 0, w, h);
-  }
-
-  const typeMap = new Map(cellTypes.map((t) => [t.id, t]));
-  const { stroke, strokeWidth } = resolveMeshStroke(typeMap);
-
-  // 3D shape surface — subtle fill so line-based bands don't match the background
-  if (ctx.generateMode === 'shapes3d') {
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
-        if (!grid[row][col].shadeBand) continue;
-        c.fillStyle = ctx.surface;
-        c.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
-      }
-    }
-  }
-
-  // Fills
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const cell = grid[row][col];
-      const type = resolveCellType(typeMap, cell);
-      if (!type || type.mode !== 'fill') continue;
-      const colors = resolveColors(type);
-      const { x, y, w, h } = insetFillRect(col, row, cellSize, getFillInset(type));
-      c.fillStyle = colors.fill;
-      c.fillRect(x, y, w, h);
-    }
-  }
-
-  // Mesh + blob outlines (deduplicated, single weight)
-  const meshLines = collectMeshLines(grid, typeMap, cols, rows, cellSize, stroke, strokeWidth);
-  drawSegments(c, meshLines);
-
-  // Circles (vector-style: no white fill rect behind)
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const cell = grid[row][col];
-      const type = resolveCellType(typeMap, cell);
-      if (!type || type.mode !== 'circle') continue;
-      const colors = resolveColors(type);
-      const cellX = col * cellSize;
-      const cellY = row * cellSize;
-      const x = cellX + cellSize / 2;
-      const y = cellY + cellSize / 2;
-      const r = cellSize * type.circleRadius;
-      c.beginPath();
-      c.arc(x, y, r, 0, Math.PI * 2);
-      c.fillStyle = colors.stroke;
-      c.fill();
-    }
-  }
-
-  // Hexagons
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const cell = grid[row][col];
-      const type = resolveCellType(typeMap, cell);
-      if (!type || type.mode !== 'hexagon') continue;
-      const colors = resolveColors(type);
-      const cellX = col * cellSize;
-      const cellY = row * cellSize;
-      const x = cellX + cellSize / 2;
-      const y = cellY + cellSize / 2;
-      const r = cellSize * type.circleRadius;
-      traceHexagonPath(c, x, y, r);
-      c.fillStyle = colors.stroke;
-      c.fill();
-    }
-  }
-
-  // Other modes
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const cell = grid[row][col];
-      const type = resolveCellType(typeMap, cell);
-      if (
-        !type ||
-        type.mode === 'fill' ||
-        type.mode === 'circle' ||
-        type.mode === 'hexagon' ||
-        isMeshMode(type) ||
-        type.mode === 'stroke'
-      )
-        continue;
-      drawOtherMode(
-        c,
-        type,
-        cell,
-        col * cellSize,
-        row * cellSize,
-        cellSize,
-        resolveColors(type),
-        svgCache,
-      );
-    }
-  }
-}
-
-function drawOtherMode(
-  ctx: CanvasRenderingContext2D,
-  type: CellTypeDef,
-  cell: { typeId: string; logoMuted?: boolean },
-  x: number,
-  y: number,
-  size: number,
-  colors: ResolvedColors,
-  svgCache: Map<string, HTMLImageElement>,
-): void {
-  const mode: RenderMode = type.mode;
-  if (mode === 'svg' && type.svgSymbolId && type.svgMarkup) {
-    const img = svgCache.get(type.svgSymbolId);
-    if (img?.complete) {
-      const scale =
-        type.id === TYPE_IDS.logo
-          ? getLogoSvgScale(type, cell.logoMuted)
-          : getSvgScale(type);
-      const { x: ox, y: oy, size: s } = scaledCellRect(size, scale);
-      const dx = x + ox;
-      const dy = y + oy;
-      ctx.drawImage(img, dx, dy, s, s);
-      const tint = type.colorApplication === 'fill' ? colors.fill : colors.stroke;
-      ctx.globalCompositeOperation = 'source-in';
-      ctx.fillStyle = tint;
-      ctx.fillRect(dx, dy, s, s);
-      ctx.globalCompositeOperation = 'source-over';
-    }
-  } else if (mode === 'stroke') {
-    // Rendered via collectMeshLines.
-  } else if (mode === 'crosshatch') {
-    drawCrosshatchCell(ctx, x, y, size, type, colors.stroke);
-  }
 }
 
 export function renderCellPreview(

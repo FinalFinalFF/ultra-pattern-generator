@@ -419,10 +419,6 @@ export function classifyNoise(value: number, items: WeightedItem[]): string {
   return thresholds[thresholds.length - 1].id;
 }
 
-export function isMeshMode(type: CellTypeDef | undefined): boolean {
-  return type?.mode === 'mesh';
-}
-
 export function isVoidCell(type: CellTypeDef | undefined): boolean {
   return type?.id === TYPE_IDS.empty;
 }

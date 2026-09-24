@@ -39,7 +39,7 @@ AppState (localStorage)  →  GeneratorContext  →  generateGrid()  →  GridCe
 
 `src/types.ts` defines all three context shapes and is the place to start when tracing anything. `AppState` is the persisted shape; `GeneratorContext` and `RenderContext` are per-frame derivations built in `main.ts` (`buildGeneratorContext`, `buildRenderContext`).
 
-**`buildSvgMarkup()` in `renderCanvas.ts` is the single rendering source of truth.** MP4 export rasterizes that same SVG string into a canvas, which is why exports match the preview pixel-for-pixel. Any new render mode must be added there. Note `renderToCanvas()` is a legacy direct-canvas renderer with no callers — do not extend it, and don't assume it stays in sync. `renderCellPreview()` (used by the cell-type panel) is a separate small per-cell canvas path.
+**`buildSvgMarkup()` in `renderCanvas.ts` is the single rendering source of truth.** MP4 export rasterizes that same SVG string into a canvas, which is why exports match the preview pixel-for-pixel. Any new render mode must be added there. SVG download and Copy to Figma pass the markup through `inlineSvgSymbols()`, because Figma doesn't resolve `currentColor` through `<use>`. `renderCellPreview()` (used by the cell-type panel) is a separate small per-cell canvas path.
 
 ### Three generate modes
 

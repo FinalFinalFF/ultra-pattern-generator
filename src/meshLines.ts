@@ -197,18 +197,3 @@ export function segmentsToSvgLines(segments: LineSegment[]): string {
     )
     .join('');
 }
-
-export function drawSegments(
-  ctx: CanvasRenderingContext2D,
-  segments: LineSegment[],
-): void {
-  for (const s of segments) {
-    ctx.strokeStyle = s.stroke;
-    ctx.lineWidth = s.strokeWidth;
-    ctx.lineCap = 'butt';
-    ctx.beginPath();
-    ctx.moveTo(s.x1, s.y1);
-    ctx.lineTo(s.x2, s.y2);
-    ctx.stroke();
-  }
-}
