@@ -332,7 +332,10 @@ export function buildSvgMarkup(ctx: RenderContext): string {
     const markup = svgMarkupForType(type);
     if (!markup) continue;
     const vb = svgViewBoxForType(type);
-    symbols += `<symbol id="${type.svgSymbolId}" viewBox="${vb}">${markup}</symbol>`;
+    // Bake the ink in: Figma and other importers don't inherit `color` through <use>,
+    // so `currentColor` would fall back to black there.
+    const inked = markup.replace(/currentColor/gi, resolveColors(type).stroke);
+    symbols += `<symbol id="${type.svgSymbolId}" viewBox="${vb}">${inked}</symbol>`;
   }
 
   let svgUses = '';
@@ -413,7 +416,7 @@ export function renderToSvg(container: HTMLElement, ctx: RenderContext): void {
 }
 
 export function downloadSvg(ctx: RenderContext, seed: string): void {
-  const svg = buildSvgMarkup(ctx);
+  const svg = inlineSvgSymbols(buildSvgMarkup(ctx));
   const blob = new Blob([`<?xml version="1.0" encoding="UTF-8"?>\n${svg}`], { type: 'image/svg+xml' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -441,8 +444,32 @@ export async function downloadPng(ctx: RenderContext, seed: string, dpr = 2): Pr
 }
 
 /** Clipboard payload Figma accepts on paste (plain SVG markup). */
+/**
+ * Replace each `<use>` of a `<symbol>` with the symbol's own markup, inked with the
+ * instance's `color`. Figma and other importers don't resolve `currentColor` through
+ * `<use>`, so symbols come out black. Also repairs markup saved before inks were baked.
+ */
+export function inlineSvgSymbols(svg: string): string {
+  const symbols = new Map<string, string>();
+  for (const m of svg.matchAll(/<symbol id="([^"]+)"[^>]*>([\s\S]*?)<\/symbol>/g)) {
+    symbols.set(m[1], m[2]);
+  }
+  if (!symbols.size) return svg;
+  return svg
+    .replace(
+      /(<svg [^>]*?) color="([^"]+)"([^>]*)><use href="#([^"]+)"[^>]*\/><\/svg>/g,
+      (whole, open: string, color: string, rest: string, id: string) => {
+        const markup = symbols.get(id);
+        if (markup === undefined) return whole;
+        return `${open}${rest}>${markup.replace(/currentColor/gi, color)}</svg>`;
+      },
+    )
+    .replace(/<defs>(?:<symbol [\s\S]*?<\/symbol>)*<\/defs>/, '');
+}
+
 export async function copySvgMarkupToClipboard(svg: string): Promise<void> {
-  const payload = svg.includes('<?xml') ? svg : `<?xml version="1.0" encoding="UTF-8"?>\n${svg}`;
+  const flat = inlineSvgSymbols(svg);
+  const payload = flat.includes('<?xml') ? flat : `<?xml version="1.0" encoding="UTF-8"?>\n${flat}`;
   try {
     await navigator.clipboard.write([
       new ClipboardItem({
