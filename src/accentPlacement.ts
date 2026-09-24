@@ -122,7 +122,14 @@ function computeBoundaryDistance(
   return dist;
 }
 
-/** One logo cell per direct foundation edge (prefer grid side on mass|grid contacts). */
+/**
+ * One logo cell per direct foundation edge (prefer grid side on mass|grid contacts).
+ *
+ * Border cells joined by region edges form a bipartite graph (the grid is a
+ * checkerboard), so each connected run is split into its two alternating halves and
+ * one half becomes logos. That puts exactly one logo on every edge with none facing
+ * each other; density then thins the chosen cells.
+ */
 function buildLogoBorderSet(
   foundations: string[][],
   dist: number[][],
@@ -134,51 +141,48 @@ function buildLogoBorderSet(
 ): Set<string> {
   const logoPhaseBucket = phase > 0 ? Math.floor(phase * LOGO_PHASE_QUANT) : 0;
   const logos = new Set<string>();
+  const groupAt = (c: number, r: number) => foundationGroup(foundations[r][c]);
+  const eligible = (c: number, r: number) =>
+    dist[r][c] === 0 && hasMassLightBorder(foundations, c, r, cols, rows);
+  const side = Array.from({ length: rows }, () => Array<number>(cols).fill(-1));
 
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
-      if (dist[row][col] !== 0) continue;
-      if (!hasMassLightBorder(foundations, col, row, cols, rows)) continue;
-      if (!accentRoll(seed, `logo:border:${col}:${row}`, density, logoPhaseBucket)) continue;
-      logos.add(cellKey(col, row));
-    }
-  }
+      if (side[row][col] !== -1 || !eligible(col, row)) continue;
 
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      for (const [dc, dr] of CARDINAL) {
-        const nc = col + dc;
-        const nr = row + dr;
-        if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
-        if (nc < col || (nc === col && nr <= row)) continue;
-
-        const g1 = foundationGroup(foundations[row][col]);
-        const g2 = foundationGroup(foundations[nr][nc]);
-        if (!g1 || !g2 || g1 === g2) continue;
-
-        const k1 = cellKey(col, row);
-        const k2 = cellKey(nc, nr);
-        if (!logos.has(k1) || !logos.has(k2)) continue;
-
-        const massGrid =
-          (g1 === 'grid') !== (g2 === 'grid') &&
-          (g1 === 'solid' ||
-            g1 === 'dot' ||
-            g1 === 'hex' ||
-            g2 === 'solid' ||
-            g2 === 'dot' ||
-            g2 === 'hex');
-
-        if (massGrid) {
-          if (g1 === 'grid') logos.delete(k2);
-          else if (g2 === 'grid') logos.delete(k1);
-          else if (accentHash(seed, `logo:edge:${k1}|${k2}`) < 0.5) logos.delete(k1);
-          else logos.delete(k2);
-        } else if (accentHash(seed, `logo:edge:${k1}|${k2}`) < 0.5) {
-          logos.delete(k1);
-        } else {
-          logos.delete(k2);
+      const members: { col: number; row: number }[] = [];
+      // Votes for each half: its cell is the grid side of a mass|grid edge.
+      const gridVotes = [0, 0];
+      side[row][col] = 0;
+      const queue = [{ col, row }];
+      for (let head = 0; head < queue.length; head++) {
+        const cur = queue[head]!;
+        members.push(cur);
+        const g = groupAt(cur.col, cur.row)!;
+        const s = side[cur.row][cur.col];
+        for (const [dc, dr] of CARDINAL) {
+          const nc = cur.col + dc;
+          const nr = cur.row + dr;
+          if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
+          const ng = groupAt(nc, nr);
+          if (!ng || ng === g || !eligible(nc, nr)) continue;
+          if (g === 'grid' && ng !== 'void') gridVotes[s]++;
+          if (side[nr][nc] === -1) {
+            side[nr][nc] = 1 - s;
+            queue.push({ col: nc, row: nr });
+          }
         }
+      }
+
+      const pick =
+        gridVotes[0] !== gridVotes[1]
+          ? gridVotes[0] > gridVotes[1] ? 0 : 1
+          : accentHash(seed, `logo:run:${cellKey(col, row)}`) < 0.5 ? 0 : 1;
+
+      for (const m of members) {
+        if (side[m.row][m.col] !== pick) continue;
+        if (!accentRoll(seed, `logo:border:${m.col}:${m.row}`, density, logoPhaseBucket)) continue;
+        logos.add(cellKey(m.col, m.row));
       }
     }
   }
