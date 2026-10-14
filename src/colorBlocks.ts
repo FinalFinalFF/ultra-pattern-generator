@@ -7,19 +7,18 @@ function seededUnit(seed: string, key: string): number {
 }
 
 /**
- * Split a span into segments that sum to `total`. Most segments are large;
- * thin slivers appear occasionally for rhythm.
+ * Smallest block edge, in cells. Anything thinner reads as a stray line once fill
+ * cells cover most of it, so blocks never go below this.
  */
-function splitAxis(
-  total: number,
-  seed: string,
-  prefix: string,
-  thinChance: number,
-): number[] {
-  if (total <= 0) return [];
-  if (total <= 2) return [total];
+const MIN_BLOCK = 4;
 
-  const minLarge = Math.max(2, Math.floor(total * 0.14));
+/** Split a span into segments that sum to `total`, each at least `MIN_BLOCK` cells. */
+function splitAxis(total: number, seed: string, prefix: string): number[] {
+  if (total <= 0) return [];
+
+  const minLarge = Math.max(MIN_BLOCK, Math.floor(total * 0.14));
+  if (total < minLarge * 2) return [total];
+
   const sizes: number[] = [];
   let remaining = total;
   let i = 0;
@@ -30,18 +29,10 @@ function splitAxis(
       break;
     }
 
-    const u = seededUnit(seed, `${prefix}:${i}`);
-    let size: number;
-
-    if (u < thinChance) {
-      const maxThin = Math.min(3, remaining - minLarge);
-      size = maxThin > 0 ? 1 + Math.floor(seededUnit(seed, `${prefix}:t:${i}`) * maxThin) : minLarge;
-    } else {
-      const spread = seededUnit(seed, `${prefix}:s:${i}`);
-      const maxFrac = 0.24 + spread * 0.56;
-      const maxSize = Math.max(minLarge, Math.floor(remaining * maxFrac));
-      size = minLarge + Math.floor(seededUnit(seed, `${prefix}:z:${i}`) * (maxSize - minLarge + 1));
-    }
+    const spread = seededUnit(seed, `${prefix}:s:${i}`);
+    const maxFrac = 0.24 + spread * 0.56;
+    const maxSize = Math.max(minLarge, Math.floor(remaining * maxFrac));
+    let size = minLarge + Math.floor(seededUnit(seed, `${prefix}:z:${i}`) * (maxSize - minLarge + 1));
 
     size = Math.max(1, Math.min(size, remaining));
 
@@ -59,8 +50,10 @@ function splitAxis(
 
 /** 2–4 wide vertical columns spanning the full grid width. */
 function columnWidths(gridCols: number, seed: string): number[] {
-  const count = 2 + Math.floor(seededUnit(seed, 'colCount') * 3);
-  const minCol = Math.max(4, Math.floor(gridCols * 0.14));
+  const minCol = Math.min(gridCols, Math.max(MIN_BLOCK, Math.floor(gridCols * 0.14)));
+  // Cap the count so `count * minCol` fits; otherwise the balancing loop below never ends.
+  const maxCount = Math.max(1, Math.floor(gridCols / minCol));
+  const count = Math.min(maxCount, 2 + Math.floor(seededUnit(seed, 'colCount') * 3));
   const weights = Array.from({ length: count }, (_, i) => 0.35 + seededUnit(seed, `colW:${i}`) * 0.65);
   const weightSum = weights.reduce((a, b) => a + b, 0);
 
@@ -119,18 +112,17 @@ export function generateColorBlocks(
 
   for (let ci = 0; ci < colWidths.length; ci++) {
     const cw = colWidths[ci]!;
-    const rowHeights = splitAxis(gridRows, seed, `row:${ci}`, 0.07);
+    const rowHeights = splitAxis(gridRows, seed, `row:${ci}`);
     let row = 0;
 
     for (let ri = 0; ri < rowHeights.length; ri++) {
       const rh = rowHeights[ri]!;
       const subdivide =
-        cw >= 5 &&
-        rh >= 3 &&
+        cw >= MIN_BLOCK * 2 &&
         seededUnit(seed, `split:${ci}:${ri}`) < (rh >= 10 ? 0.16 : 0.22);
 
       if (subdivide) {
-        const subWidths = splitAxis(cw, seed, `subw:${ci}:${ri}`, 0.08);
+        const subWidths = splitAxis(cw, seed, `subw:${ci}:${ri}`);
         let subCol = col;
         for (let si = 0; si < subWidths.length; si++) {
           const sw = subWidths[si]!;

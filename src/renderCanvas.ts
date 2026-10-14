@@ -25,13 +25,35 @@ import type {
 } from './types';
 import { TYPE_IDS } from './types';
 
-function colorBlocksSvg(blocks: ColorBlock[], cellSize: number): string {
+/**
+ * Block rects with interior edges pushed past the fill gutter. A gutter straddles the
+ * cell edge, so a block boundary on the cell edge splits it into two colors; shifting
+ * by the inset gives each gutter a single color. Canvas edges stay put.
+ */
+function colorBlocksSvg(
+  blocks: ColorBlock[],
+  cellSize: number,
+  cols: number,
+  rows: number,
+  gutter: number,
+): string {
+  const edge = (cell: number, last: number) =>
+    cell === 0 || cell === last ? cell * cellSize : cell * cellSize + gutter;
+  const r = (n: number) => Math.round(n * 1000) / 1000;
   return blocks
-    .map(
-      (b) =>
-        `<rect x="${b.col * cellSize}" y="${b.row * cellSize}" width="${b.cols * cellSize}" height="${b.rows * cellSize}" fill="${b.color}"/>`,
-    )
+    .map((b) => {
+      const x = edge(b.col, cols);
+      const y = edge(b.row, rows);
+      const w = edge(b.col + b.cols, cols) - x;
+      const h = edge(b.row + b.rows, rows) - y;
+      return `<rect x="${r(x)}" y="${r(y)}" width="${r(w)}" height="${r(h)}" fill="${b.color}"/>`;
+    })
     .join('');
+}
+
+/** Half-gutter between fill cells: the widest fill inset in play. */
+function blockGutter(cellTypes: CellTypeDef[], cellSize: number): number {
+  return cellTypes.reduce((m, t) => Math.max(m, getFillInset(t)), 0) * cellSize;
 }
 
 export function resolveColors(type: CellTypeDef): ResolvedColors {
@@ -219,7 +241,7 @@ export function buildSvgMarkup(ctx: RenderContext): string {
   const lines = segmentsToSvgLines(meshLines);
 
   const colorBlockLayer = ctx.colorBlocks?.length
-    ? `<g id="color-blocks">${colorBlocksSvg(ctx.colorBlocks, cellSize)}</g>`
+    ? `<g id="color-blocks">${colorBlocksSvg(ctx.colorBlocks, cellSize, cols, rows, blockGutter(cellTypes, cellSize))}</g>`
     : '';
   const backgroundLayer = colorBlockLayer || `<rect width="100%" height="100%" fill="${ctx.paper}"/>`;
 
