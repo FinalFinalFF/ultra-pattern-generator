@@ -27,10 +27,11 @@ import { TYPE_IDS } from './types';
 
 /**
  * Empty space between a cell's edge and the shape drawn in it (fraction of cell size).
- * Line-based and empty cells report 0 so block edges stay on the cell edge there.
+ * Line-based cells report 0 so block edges stay on the cell edge there; empty cells
+ * report null since nothing in them can be cut.
  */
-function cellClearance(type: CellTypeDef | undefined, cell: GridCell): number {
-  if (!type) return 0;
+function cellClearance(type: CellTypeDef | undefined, cell: GridCell): number | null {
+  if (!type || type.mode === 'none') return null;
   switch (type.mode) {
     case 'fill':
       return getFillInset(type);
@@ -48,12 +49,40 @@ function cellClearance(type: CellTypeDef | undefined, cell: GridCell): number {
 }
 
 /**
- * Color blocks as staircase paths. A fill gutter straddles the cell edge, so a block
- * boundary on the cell edge splits it into two colors. Each interior edge is pushed
- * past the gutter by the clearance of the cell it runs into, so gutters read as one
- * color without the edge cutting through a shape with a narrower gap (dots vs.
- * solids). Plain rects underneath fill the tiny gaps where staircase corners meet.
+ * Shift for every interior block boundary on one grid line. A fill gutter straddles the
+ * cell edge, so a boundary on the cell edge splits it into two colors; pushing it past
+ * the gutter keeps each gutter one color. Each contiguous run of boundary along the line
+ * shifts by the smallest clearance of the cells it runs into, so edges stay straight
+ * and never cut a shape with a narrower gap (dots vs. solids).
  */
+function boundaryShifts(
+  lines: number,
+  span: number,
+  isBoundary: (line: number, i: number) => boolean,
+  clearance: (line: number, i: number) => number | null,
+): number[][] {
+  const shifts = Array.from({ length: lines + 1 }, () => new Array<number>(span).fill(0));
+  for (let line = 1; line < lines; line++) {
+    let i = 0;
+    while (i < span) {
+      if (!isBoundary(line, i)) {
+        i++;
+        continue;
+      }
+      const start = i;
+      let min = Infinity;
+      for (; i < span && isBoundary(line, i); i++) {
+        const c = clearance(line, i);
+        if (c !== null) min = Math.min(min, c);
+      }
+      const shift = Number.isFinite(min) ? min : 0;
+      for (let j = start; j < i; j++) shifts[line]![j] = shift;
+    }
+  }
+  return shifts;
+}
+
+/** Block rects with interior edges shifted per `boundaryShifts`. Canvas edges stay put. */
 function colorBlocksSvg(
   blocks: ColorBlock[],
   grid: GridCell[][],
@@ -62,72 +91,36 @@ function colorBlocksSvg(
   cols: number,
   rows: number,
 ): string {
-  const r = (n: number) => Math.round(n * 1000) / 1000;
+  const owner = Array.from({ length: rows }, () => new Array<number>(cols).fill(-1));
+  blocks.forEach((b, i) => {
+    for (let row = b.row; row < b.row + b.rows; row++) {
+      for (let col = b.col; col < b.col + b.cols; col++) owner[row]![col] = i;
+    }
+  });
   const clearance = (row: number, col: number) => {
     const cell = grid[row]?.[col];
-    return cell ? cellClearance(resolveCellType(typeMap, cell), cell) * cellSize : 0;
+    const c = cell ? cellClearance(resolveCellType(typeMap, cell), cell) : null;
+    return c === null ? null : c * cellSize;
   };
-  // Vertical boundary at grid line `col`, in `row`; horizontal boundary at line `row`, in `col`.
-  const X = (row: number, col: number) =>
-    col === 0 || col === cols ? col * cellSize : col * cellSize + clearance(row, col);
-  const Y = (row: number, col: number) =>
-    row === 0 || row === rows ? row * cellSize : row * cellSize + clearance(row, col);
+  // rowShift[row][col]: horizontal line `row`, in column `col`. colShift[col][row]: vertical line `col`, in row `row`.
+  const rowShift = boundaryShifts(rows, cols, (row, col) => owner[row - 1]![col] !== owner[row]![col], clearance);
+  const colShift = boundaryShifts(
+    cols,
+    rows,
+    (col, row) => owner[row]![col - 1] !== owner[row]![col],
+    (col, row) => clearance(row, col),
+  );
 
-  const underlay = blocks
-    .map(
-      (b) =>
-        `<rect x="${r(b.col * cellSize)}" y="${r(b.row * cellSize)}" width="${r(b.cols * cellSize)}" height="${r(b.rows * cellSize)}" fill="${b.color}"/>`,
-    )
-    .join('');
-
-  const paths = blocks
+  const r = (n: number) => Math.round(n * 1000) / 1000;
+  return blocks
     .map((b) => {
-      const c0 = b.col;
-      const c1 = b.col + b.cols;
-      const r0 = b.row;
-      const r1 = b.row + b.rows;
-      const pts: [number, number][] = [];
-      for (let c = c0; c < c1; c++) {
-        pts.push([c === c0 ? X(r0, c0) : c * cellSize, Y(r0, c)]);
-        pts.push([c === c1 - 1 ? X(r0, c1) : (c + 1) * cellSize, Y(r0, c)]);
-      }
-      for (let row = r0; row < r1; row++) {
-        pts.push([X(row, c1), row === r0 ? Y(r0, c1 - 1) : row * cellSize]);
-        pts.push([X(row, c1), row === r1 - 1 ? Y(r1, c1 - 1) : (row + 1) * cellSize]);
-      }
-      for (let c = c1 - 1; c >= c0; c--) {
-        pts.push([c === c1 - 1 ? X(r1 - 1, c1) : (c + 1) * cellSize, Y(r1, c)]);
-        pts.push([c === c0 ? X(r1 - 1, c0) : c * cellSize, Y(r1, c)]);
-      }
-      for (let row = r1 - 1; row >= r0; row--) {
-        pts.push([X(row, c0), row === r1 - 1 ? Y(r1, c0) : (row + 1) * cellSize]);
-        pts.push([X(row, c0), row === r0 ? Y(r0, c0) : row * cellSize]);
-      }
-      return `<path d="${simplifyOutline(pts.map(([x, y]) => [r(x), r(y)]))}" fill="${b.color}"/>`;
+      const x0 = b.col * cellSize + colShift[b.col]![b.row]!;
+      const y0 = b.row * cellSize + rowShift[b.row]![b.col]!;
+      const x1 = (b.col + b.cols) * cellSize + colShift[b.col + b.cols]![b.row]!;
+      const y1 = (b.row + b.rows) * cellSize + rowShift[b.row + b.rows]![b.col]!;
+      return `<rect x="${r(x0)}" y="${r(y0)}" width="${r(x1 - x0)}" height="${r(y1 - y0)}" fill="${b.color}"/>`;
     })
     .join('');
-
-  return underlay + paths;
-}
-
-/** Drop repeated and collinear points from an axis-aligned outline; emit path data. */
-function simplifyOutline(pts: [number, number][]): string {
-  const out: [number, number][] = [];
-  for (const p of pts) {
-    const last = out[out.length - 1];
-    if (last && last[0] === p[0] && last[1] === p[1]) continue;
-    const prev = out[out.length - 2];
-    if (
-      prev &&
-      last &&
-      ((prev[0] === last[0] && last[0] === p[0]) || (prev[1] === last[1] && last[1] === p[1]))
-    ) {
-      out[out.length - 1] = p;
-      continue;
-    }
-    out.push(p);
-  }
-  return `M${out.map(([x, y]) => `${x} ${y}`).join('L')}Z`;
 }
 
 export function resolveColors(type: CellTypeDef): ResolvedColors {
