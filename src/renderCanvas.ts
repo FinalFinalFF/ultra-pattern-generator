@@ -75,7 +75,9 @@ function boundaryShifts(
         const c = clearance(line, i);
         if (c !== null) min = Math.min(min, c);
       }
-      const shift = Number.isFinite(min) ? min : 0;
+      // Whole pixels only: a sub-pixel shift fixes nothing visible but knocks edges off
+      // the pixel grid in Figma. Rounding down never moves an edge into a shape.
+      const shift = Number.isFinite(min) ? Math.floor(min + 1e-6) : 0;
       for (let j = start; j < i; j++) shifts[line]![j] = shift;
     }
   }
