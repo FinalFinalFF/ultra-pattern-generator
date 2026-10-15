@@ -26,34 +26,108 @@ import type {
 import { TYPE_IDS } from './types';
 
 /**
- * Block rects with interior edges pushed past the fill gutter. A gutter straddles the
- * cell edge, so a block boundary on the cell edge splits it into two colors; shifting
- * by the inset gives each gutter a single color. Canvas edges stay put.
+ * Empty space between a cell's edge and the shape drawn in it (fraction of cell size).
+ * Line-based and empty cells report 0 so block edges stay on the cell edge there.
+ */
+function cellClearance(type: CellTypeDef | undefined, cell: GridCell): number {
+  if (!type) return 0;
+  switch (type.mode) {
+    case 'fill':
+      return getFillInset(type);
+    case 'circle':
+    case 'hexagon':
+      return Math.max(0, 0.5 - type.circleRadius);
+    case 'svg': {
+      const scale =
+        type.id === TYPE_IDS.logo ? getLogoSvgScale(type, cell.logoMuted) : getSvgScale(type);
+      return Math.max(0, (1 - scale) / 2);
+    }
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Color blocks as staircase paths. A fill gutter straddles the cell edge, so a block
+ * boundary on the cell edge splits it into two colors. Each interior edge is pushed
+ * past the gutter by the clearance of the cell it runs into, so gutters read as one
+ * color without the edge cutting through a shape with a narrower gap (dots vs.
+ * solids). Plain rects underneath fill the tiny gaps where staircase corners meet.
  */
 function colorBlocksSvg(
   blocks: ColorBlock[],
+  grid: GridCell[][],
+  typeMap: Map<string, CellTypeDef>,
   cellSize: number,
   cols: number,
   rows: number,
-  gutter: number,
 ): string {
-  const edge = (cell: number, last: number) =>
-    cell === 0 || cell === last ? cell * cellSize : cell * cellSize + gutter;
   const r = (n: number) => Math.round(n * 1000) / 1000;
-  return blocks
+  const clearance = (row: number, col: number) => {
+    const cell = grid[row]?.[col];
+    return cell ? cellClearance(resolveCellType(typeMap, cell), cell) * cellSize : 0;
+  };
+  // Vertical boundary at grid line `col`, in `row`; horizontal boundary at line `row`, in `col`.
+  const X = (row: number, col: number) =>
+    col === 0 || col === cols ? col * cellSize : col * cellSize + clearance(row, col);
+  const Y = (row: number, col: number) =>
+    row === 0 || row === rows ? row * cellSize : row * cellSize + clearance(row, col);
+
+  const underlay = blocks
+    .map(
+      (b) =>
+        `<rect x="${r(b.col * cellSize)}" y="${r(b.row * cellSize)}" width="${r(b.cols * cellSize)}" height="${r(b.rows * cellSize)}" fill="${b.color}"/>`,
+    )
+    .join('');
+
+  const paths = blocks
     .map((b) => {
-      const x = edge(b.col, cols);
-      const y = edge(b.row, rows);
-      const w = edge(b.col + b.cols, cols) - x;
-      const h = edge(b.row + b.rows, rows) - y;
-      return `<rect x="${r(x)}" y="${r(y)}" width="${r(w)}" height="${r(h)}" fill="${b.color}"/>`;
+      const c0 = b.col;
+      const c1 = b.col + b.cols;
+      const r0 = b.row;
+      const r1 = b.row + b.rows;
+      const pts: [number, number][] = [];
+      for (let c = c0; c < c1; c++) {
+        pts.push([c === c0 ? X(r0, c0) : c * cellSize, Y(r0, c)]);
+        pts.push([c === c1 - 1 ? X(r0, c1) : (c + 1) * cellSize, Y(r0, c)]);
+      }
+      for (let row = r0; row < r1; row++) {
+        pts.push([X(row, c1), row === r0 ? Y(r0, c1 - 1) : row * cellSize]);
+        pts.push([X(row, c1), row === r1 - 1 ? Y(r1, c1 - 1) : (row + 1) * cellSize]);
+      }
+      for (let c = c1 - 1; c >= c0; c--) {
+        pts.push([c === c1 - 1 ? X(r1 - 1, c1) : (c + 1) * cellSize, Y(r1, c)]);
+        pts.push([c === c0 ? X(r1 - 1, c0) : c * cellSize, Y(r1, c)]);
+      }
+      for (let row = r1 - 1; row >= r0; row--) {
+        pts.push([X(row, c0), row === r1 - 1 ? Y(r1, c0) : (row + 1) * cellSize]);
+        pts.push([X(row, c0), row === r0 ? Y(r0, c0) : row * cellSize]);
+      }
+      return `<path d="${simplifyOutline(pts.map(([x, y]) => [r(x), r(y)]))}" fill="${b.color}"/>`;
     })
     .join('');
+
+  return underlay + paths;
 }
 
-/** Half-gutter between fill cells: the widest fill inset in play. */
-function blockGutter(cellTypes: CellTypeDef[], cellSize: number): number {
-  return cellTypes.reduce((m, t) => Math.max(m, getFillInset(t)), 0) * cellSize;
+/** Drop repeated and collinear points from an axis-aligned outline; emit path data. */
+function simplifyOutline(pts: [number, number][]): string {
+  const out: [number, number][] = [];
+  for (const p of pts) {
+    const last = out[out.length - 1];
+    if (last && last[0] === p[0] && last[1] === p[1]) continue;
+    const prev = out[out.length - 2];
+    if (
+      prev &&
+      last &&
+      ((prev[0] === last[0] && last[0] === p[0]) || (prev[1] === last[1] && last[1] === p[1]))
+    ) {
+      out[out.length - 1] = p;
+      continue;
+    }
+    out.push(p);
+  }
+  return `M${out.map(([x, y]) => `${x} ${y}`).join('L')}Z`;
 }
 
 export function resolveColors(type: CellTypeDef): ResolvedColors {
@@ -241,7 +315,7 @@ export function buildSvgMarkup(ctx: RenderContext): string {
   const lines = segmentsToSvgLines(meshLines);
 
   const colorBlockLayer = ctx.colorBlocks?.length
-    ? `<g id="color-blocks">${colorBlocksSvg(ctx.colorBlocks, cellSize, cols, rows, blockGutter(cellTypes, cellSize))}</g>`
+    ? `<g id="color-blocks">${colorBlocksSvg(ctx.colorBlocks, grid, typeMap, cellSize, cols, rows)}</g>`
     : '';
   const backgroundLayer = colorBlockLayer || `<rect width="100%" height="100%" fill="${ctx.paper}"/>`;
 
