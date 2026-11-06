@@ -96,7 +96,7 @@ function colorBlocksSvg(
   const owner = Array.from({ length: rows }, () => new Array<number>(cols).fill(-1));
   blocks.forEach((b, i) => {
     for (let row = b.row; row < b.row + b.rows; row++) {
-      for (let col = b.col; col < b.col + b.cols; col++) owner[row]![col] = i;
+      for (let col = b.col; col < b.col + b.cols; col++) owner[row]![col] = b.shape ?? i;
     }
   });
   const clearance = (row: number, col: number) => {
@@ -114,6 +114,9 @@ function colorBlocksSvg(
   );
 
   const r = (n: number) => Math.round(n * 1000) / 1000;
+  if (blocks.some((b) => b.shape !== undefined)) {
+    return colorShapesSvg(blocks, cellSize, rowShift, colShift, r);
+  }
   return blocks
     .map((b) => {
       const x0 = b.col * cellSize + colShift[b.col]![b.row]!;
@@ -123,6 +126,58 @@ function colorBlocksSvg(
       return `<rect x="${r(x0)}" y="${r(y0)}" width="${r(x1 - x0)}" height="${r(y1 - y0)}" fill="${b.color}"/>`;
     })
     .join('');
+}
+
+/**
+ * Color shapes as one path per color. Shape edges step along cell edges, and each
+ * boundary segment carries its own shift, so neighboring cells can pull apart at a
+ * gutter crossing. An unshifted layer underneath fills those corners with the color
+ * of the cell they belong to; the shifted layer on top moves the edges into the gutters.
+ */
+function colorShapesSvg(
+  runs: ColorBlock[],
+  cellSize: number,
+  rowShift: number[][],
+  colShift: number[][],
+  r: (n: number) => number,
+): string {
+  const base = new Map<string, string[]>();
+  const shifted = new Map<string, string[]>();
+  const rect = (into: Map<string, string[]>, color: string, x0: number, y0: number, x1: number, y1: number) => {
+    const list = into.get(color) ?? [];
+    list.push(`M${r(x0)} ${r(y0)}H${r(x1)}V${r(y1)}H${r(x0)}Z`);
+    into.set(color, list);
+  };
+
+  for (const run of runs) {
+    const { row, color } = run;
+    const end = run.col + run.cols;
+    rect(base, color, run.col * cellSize, row * cellSize, end * cellSize, (row + 1) * cellSize);
+    // Split where the top or bottom shift changes, so every piece is a plain rect.
+    let start = run.col;
+    for (let col = run.col + 1; col <= end; col++) {
+      if (
+        col < end &&
+        rowShift[row]![col] === rowShift[row]![start] &&
+        rowShift[row + 1]![col] === rowShift[row + 1]![start]
+      ) {
+        continue;
+      }
+      rect(
+        shifted,
+        color,
+        start * cellSize + (start === run.col ? colShift[start]![row]! : 0),
+        row * cellSize + rowShift[row]![start]!,
+        col * cellSize + (col === end ? colShift[end]![row]! : 0),
+        (row + 1) * cellSize + rowShift[row + 1]![start]!,
+      );
+      start = col;
+    }
+  }
+
+  const paths = (layer: Map<string, string[]>) =>
+    [...layer].map(([color, d]) => `<path fill="${color}" d="${d.join('')}"/>`).join('');
+  return paths(base) + paths(shifted);
 }
 
 export function resolveColors(type: CellTypeDef): ResolvedColors {

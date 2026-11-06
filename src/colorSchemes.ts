@@ -12,7 +12,7 @@ import {
   type BrandFamily,
   type BrandShade,
 } from './brandColors';
-import { colorBlocksSwatchStyle } from './colorBlocks';
+import { colorBlocksSwatchStyle, colorShapesSwatchStyle, usesColorBlocks } from './colorBlocks';
 import { hashSeed } from './noise';
 
 export { BRAND } from './brandColors';
@@ -89,6 +89,13 @@ export const COLOR_SCHEMES: ColorScheme[] = [
   {
     id: 'color-blocks',
     name: 'Color blocks',
+    paper: BRAND.white,
+    surface: '#F0F0F0',
+    ink: BRAND.black,
+  },
+  {
+    id: 'color-shapes',
+    name: 'Color shapes',
     paper: BRAND.white,
     surface: '#F0F0F0',
     ink: BRAND.black,
@@ -312,7 +319,7 @@ export function isSeededScheme(id: ColorSchemeId): boolean {
 
 /** Palette or block layout re-rolls when the already-selected scheme is clicked again. */
 export function schemeRerollsOnReselect(id: ColorSchemeId): boolean {
-  return isSeededScheme(id) || id === 'color-blocks';
+  return isSeededScheme(id) || usesColorBlocks(id);
 }
 
 export function colorFieldSeedForState(
@@ -382,6 +389,9 @@ export function resolvePaperColors(
 export function schemeSwatchStyle(scheme: ColorScheme): string {
   if (scheme.id === 'color-blocks') {
     return colorBlocksSwatchStyle();
+  }
+  if (scheme.id === 'color-shapes') {
+    return colorShapesSwatchStyle();
   }
   if (scheme.typeInk) {
     const c = scheme.typeInk;

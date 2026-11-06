@@ -16,7 +16,7 @@ npm ci
 npm run dev        # http://localhost:5173
 npm run build      # typecheck, then build to dist/
 npm run preview    # serve the production build locally
-npm run verify     # headless checks: 3D shape coverage and logo placement
+npm run verify     # headless checks: 3D shape coverage, logo placement, color shapes
 ```
 
 `npm run build` fails on any type error or unused variable. Run `npm run build && npm run verify`
@@ -27,7 +27,8 @@ before every push.
 - **Three generate modes**: Pattern (Simplex-noise clusters), 3D shapes (ray-traced SDF scene,
   fixed 72×72 grid), and Gradient (mesh and ribbon density bands)
 - **Accent placement**: outline, crosshatch and logo overlays along region borders
-- **Color schemes**: mono, per-hue brand pairs, color blocks, and three generated palettes
+- **Color schemes**: mono, per-hue brand pairs, color blocks (rectangles), color shapes (organic
+  regions that step along the cells like the pattern's own blobs), and three generated palettes
   (Random, Brand random, Brand pure)
 - **Cell type editor**: add, edit, remove and reorder types; parametric modes or custom SVG upload
 - **Animation**: loops seamlessly; MP4 length snaps to whole loop periods
@@ -114,7 +115,7 @@ src/
 
   colorSchemes.ts     Scheme definitions + seeded palette generators
   brandColors.ts      Brand palette, shade ramps, contrast math
-  colorBlocks.ts      Color block layout and palette cycling
+  colorBlocks.ts      Color block and color shape layouts, palette cycling
   state.ts            localStorage persistence and migrations
   styles.css          App styles
 ```

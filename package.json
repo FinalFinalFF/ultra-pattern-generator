@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "verify": "tsx scripts/verify-3d.ts && tsx scripts/verify-logos.ts"
+    "verify": "tsx scripts/verify-3d.ts && tsx scripts/verify-logos.ts && tsx scripts/verify-color-shapes.ts"
   },
   "dependencies": {
     "mediabunny": "^1.55.5"

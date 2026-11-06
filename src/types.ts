@@ -91,6 +91,8 @@ export interface ColorBlock {
   cols: number;
   rows: number;
   color: string;
+  /** Set on color-shape runs: every run of one shape shares this id. */
+  shape?: number;
 }
 
 export type ColorSchemeId =
@@ -100,6 +102,7 @@ export type ColorSchemeId =
   | 'red-light-on-dark'
   | 'pink-light-on-dark'
   | 'color-blocks'
+  | 'color-shapes'
   | 'random'
   | 'brand-random'
   | 'brand-pure';

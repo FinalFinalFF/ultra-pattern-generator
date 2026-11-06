@@ -17,6 +17,7 @@ There is no test framework. Invariants are checked by two headless verification 
 ```bash
 npx tsx scripts/verify-3d.ts      # SDF ray-hit rates across seeds; every one of the 9 shape kinds must hit
 npx tsx scripts/verify-logos.ts   # logo cells sit on valid type boundaries
+npx tsx scripts/verify-color-shapes.ts  # color shapes: full coverage, no strip under 4 cells, color mix
 ```
 
 `node --experimental-strip-types` will **not** work in place of `tsx`, because `src/` modules use extensionless import specifiers that only a bundler-style resolver handles.
@@ -66,7 +67,7 @@ Anything that mutates bulk densities must re-run `normalizeBulkDensities` or `se
 
 ### Colors live on cell types, not in the scheme
 
-`applyColorScheme()` (`colorSchemes.ts`) rewrites every type's `fill`/`stroke` from the selected scheme. Consequence: switching schemes discards hand-edited per-type colors, and any code that persists colors must run after scheme application, not before. Schemes whose palette is generated rather than fixed are registered in `SEEDED_SCHEME_GENERATORS` (`random`, `brand-random`, `brand-pure`) and detected via `isSeededScheme()` — `getColorScheme`, `colorFieldSeedForState`, state migration, and swatch refresh all branch on that helper, so a new generated scheme only needs a registry entry plus a `COLOR_SCHEMES` record. `color-blocks` is seeded too but drives block *layout* (`colorBlocksLayoutSeed`), not `typeInk`. All of them re-roll `state.colorFieldSeed` on select/re-select (`schemeRerollsOnReselect`).
+`applyColorScheme()` (`colorSchemes.ts`) rewrites every type's `fill`/`stroke` from the selected scheme. Consequence: switching schemes discards hand-edited per-type colors, and any code that persists colors must run after scheme application, not before. Schemes whose palette is generated rather than fixed are registered in `SEEDED_SCHEME_GENERATORS` (`random`, `brand-random`, `brand-pure`) and detected via `isSeededScheme()` — `getColorScheme`, `colorFieldSeedForState`, state migration, and swatch refresh all branch on that helper, so a new generated scheme only needs a registry entry plus a `COLOR_SCHEMES` record. `color-blocks` and `color-shapes` (both matched by `usesColorBlocks`) are seeded too but drive background *layout* (`colorBlocksLayoutSeed`), not `typeInk`. Color shapes are organic noise regions emitted as one-row `ColorBlock` runs tagged with `shape`; every cell must sit in a 4×4 square of its own color (`MIN_SHAPE_SPAN`) so no thin strips appear, and `colorShapesSvg` draws them as one path per color in two layers (unshifted underneath, gutter-shifted on top). All of them re-roll `state.colorFieldSeed` on select/re-select (`schemeRerollsOnReselect`).
 
 ### Animation is a pure function of time
 
