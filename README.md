@@ -2,42 +2,85 @@
 
 **Live:** [ultra.fnfn.us](https://ultra.fnfn.us)
 
-Generate organic grid patterns that mix line meshes, dots, solid shapes, logos, outlines, and crosshatch — clustered by Simplex noise fields. Edit cell types, animate patterns, and export as SVG or MP4.
+A browser tool for generating Ultra Security grid patterns. It mixes line meshes, dots, hexagons, solid shapes, logo marks, outlines and crosshatch, clustered by noise fields, 3D shapes or gradients. Patterns can be animated and exported as SVG, PNG or MP4, or copied straight into Figma.
+
+## Requirements
+
+- Node.js 22.12 or newer (`.nvmrc` pins 24; run `nvm use` to match)
+- npm (a `package-lock.json` is committed, so use `npm ci` for a clean install)
+
+No accounts, API keys or environment variables are needed. Everything runs in the browser.
 
 ## Local development
 
 ```bash
-npm install
+npm ci
 npm run dev        # http://localhost:5173
-npm run build      # outputs to dist/
-npm run preview    # serve production build locally
+npm run build      # typecheck, then build to dist/
+npm run preview    # serve the production build locally
+npm run verify     # headless checks: 3D shape coverage and logo placement
 ```
+
+`npm run build` fails on any type error or unused variable. Run `npm run build && npm run verify`
+before every push.
 
 ## Features
 
-- **Shape noise** — clusters cell types (empty, grid lines, dots, solids, accents) into organic blobs
-- **Accent placement** — outline, crosshatch, and logo overlays on grid carriers
-- **Color schemes** — mono, per-hue brand pairs, color blocks, and three generated palettes (Random, Brand random, Brand pure) that assign one color per cell type
-- **Cell type editor** — add, edit, remove, reorder types; parametric modes or custom SVG upload
-- **3D shapes mode** — ray-traced SDF scene mapped to cell types (experimental)
-- **SVG export** — clean vector output
-- **MP4 recording** — frame capture encoded in the browser via WebCodecs
-- **Settings persist** in localStorage
+- **Three generate modes**: Pattern (Simplex-noise clusters), 3D shapes (ray-traced SDF scene,
+  fixed 72×72 grid), and Gradient (mesh and ribbon density bands)
+- **Accent placement**: outline, crosshatch and logo overlays along region borders
+- **Color schemes**: mono, per-hue brand pairs, color blocks, and three generated palettes
+  (Random, Brand random, Brand pure)
+- **Cell type editor**: add, edit, remove and reorder types; parametric modes or custom SVG upload
+- **Animation**: loops seamlessly; MP4 length snaps to whole loop periods
+- **Export**: SVG, PNG, MP4 (encoded in the browser with WebCodecs), and Copy to Figma (SVG
+  with symbols inlined so Figma keeps the colors)
+- **Saved patterns** and all settings persist in the browser's localStorage
 
 ## Deploy to Netlify
 
-1. In [Netlify](https://app.netlify.com/) → **Add new site** → **Import from Git**
-2. Select [FinalFinalFF/ultra-pattern-generator](https://github.com/FinalFinalFF/ultra-pattern-generator)
-3. Build settings (auto-detected): build command `npm run build` and publish directory `dist` come
-   from `netlify.toml`; Node 20 comes from `.nvmrc`
-4. Deploy — every push to `main` rebuilds automatically
+1. In [Netlify](https://app.netlify.com/), choose **Add new site** → **Import from Git**
+2. Select this repository
+3. The build settings come from `netlify.toml` (command `npm run build`, publish directory
+   `dist`); the Node version comes from `.nvmrc`
+4. Deploy. Every push to `main` rebuilds automatically
 
-`ultra.fnfn.us` is a CNAME to the Netlify site, set to **DNS only** (grey cloud) in Cloudflare so
-Netlify can provision and renew its own TLS certificate.
+The output is a static site, so any static host works: run `npm run build` and upload `dist/`.
+
+The current deployment is [ultra.fnfn.us](https://ultra.fnfn.us), a CNAME to the Netlify site, set
+to **DNS only** (grey cloud) in Cloudflare so Netlify can provision and renew its own TLS
+certificate. A new owner pointing their own domain at their own Netlify site should follow
+Netlify's custom domain steps instead.
+
+## Fonts
+
+All fonts are served from `public/fonts/`.
+
+| Font | Used for | License |
+| --- | --- | --- |
+| Aeonik (Light, Regular, Medium) | Wordmark and display text | Commercial (CoType Foundry). Confirm a web license covers your deployment before hosting it |
+| Inter | Interface text | SIL Open Font License, `public/fonts/OFL-Inter.txt` |
+| DM Mono | Labels and numbers | SIL Open Font License, `public/fonts/OFL-DM-Mono.txt` |
+
+If Aeonik isn't licensed for your domain, delete the three `Aeonik-*.otf` files and their
+`@font-face` blocks at the top of `src/styles.css`. The display text falls back to Inter.
+
+## Maintenance notes
+
+- **Saved settings carry a version.** `AppState` is stored in localStorage with
+  `STATE_VERSION` (`src/state.ts`). Any change to the state shape, the default cell types or the
+  color scheme ids needs a version bump and a migration block in `migrateState()`, or returning
+  users load a broken configuration.
+- **One renderer.** `buildSvgMarkup()` in `src/renderCanvas.ts` produces the preview, SVG, PNG
+  and every MP4 frame, which is why exports match the preview exactly. Add new drawing there.
+- **Animation is a pure function of time.** Don't keep state between frames in the generators;
+  seamless loops depend on any frame being reproducible from its timestamp.
+- `CLAUDE.md` has a fuller architecture guide (data flow, density rules, UI wiring).
 
 ## Browser support
 
-- Chrome / Firefox / Edge / Safari — full support including MP4 export
+Current Chrome, Edge, Firefox and Safari, including MP4 export. MP4 export needs WebCodecs
+(`VideoEncoder`), which every current version of these browsers has.
 
 ## Project structure
 

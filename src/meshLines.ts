@@ -1,7 +1,7 @@
 import {
   isGridLineCell,
   isMeshGutterNeighbor,
-  isVoidAdjacent,
+  isVoidCellAt,
   scaledStrokeWidth,
 } from './cellTypes';
 import { applyShadeVisualScale } from './shapes3dVisual';
@@ -143,7 +143,7 @@ export function collectMeshLines(
       const cell = grid[row][col];
       const type = lineTypeForCell(cell, typeMap);
       if (!isGridLineCell(type)) continue;
-      if (isVoidAdjacent(grid, typeMap, col, row, cols, rows)) continue;
+      if (isVoidCellAt(grid, typeMap, col, row)) continue;
 
       const x = col * cellSize;
       const y = row * cellSize;

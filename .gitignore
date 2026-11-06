@@ -1,7 +1,5 @@
 node_modules/
 dist/
-dist-verify/
-dist.zip
-public/ffmpeg/
+.netlify/
 .DS_Store
 *.local

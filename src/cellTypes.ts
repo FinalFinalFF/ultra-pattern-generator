@@ -62,9 +62,6 @@ export function mergeCellTypeDefaults(types: CellTypeDef[]): CellTypeDef[] {
   });
 }
 
-/** @deprecated Use mergeCellTypeDefaults */
-export const patchAccentCellTypes = mergeCellTypeDefaults;
-
 export function createId(): string {
   return crypto.randomUUID();
 }
@@ -360,14 +357,6 @@ export function resetCellTypeDensities<T extends WeightedItem>(items: T[]): T[] 
   return normalizeBulkDensities(next);
 }
 
-/** @deprecated Use normalizeBulkDensities */
-export const normalizeBulkWeights = normalizeBulkDensities;
-
-/** @deprecated Use normalizeBulkDensities */
-export function normalizeWeights<T extends WeightedItem>(items: T[]): T[] {
-  return normalizeBulkDensities(items);
-}
-
 export function redistributeDensities<T extends WeightedItem>(
   items: T[],
   removedId: string,
@@ -393,9 +382,6 @@ export function redistributeDensities<T extends WeightedItem>(
   );
 }
 
-/** @deprecated Use redistributeDensities */
-export const redistributeWeights = redistributeDensities;
-
 export function densitiesToThresholds(items: WeightedItem[]): { id: string; threshold: number }[] {
   const sorted = [...items]
     .filter((i) => i.enabled && i.density > 0)
@@ -406,9 +392,6 @@ export function densitiesToThresholds(items: WeightedItem[]): { id: string; thre
     return { id: item.id, threshold: cumulative };
   });
 }
-
-/** @deprecated Use densitiesToThresholds */
-export const weightsToThresholds = densitiesToThresholds;
 
 export function classifyNoise(value: number, items: WeightedItem[]): string {
   const thresholds = densitiesToThresholds(items);
@@ -434,18 +417,6 @@ export function isVoidCellAt(
     return false;
   }
   return isVoidCell(typeMap.get(grid[row][col].typeId));
-}
-
-/** @deprecated Use isVoidCellAt — skips mesh only on void cells, not neighbors. */
-export function isVoidAdjacent(
-  grid: GridCell[][],
-  typeMap: Map<string, CellTypeDef>,
-  col: number,
-  row: number,
-  _cols: number,
-  _rows: number,
-): boolean {
-  return isVoidCellAt(grid, typeMap, col, row);
 }
 
 /** True for mesh render mode (grid lines). */

@@ -273,30 +273,3 @@ export function applyAccentPlacement(
 
   return result;
 }
-
-/** @deprecated Tests and tooling — returns logo sites from unified border pass. */
-export function findGovernanceLogoCells(
-  grid: GridCell[][],
-  cols: number,
-  rows: number,
-  seed: string,
-  logoDensity = 1,
-): { col: number; row: number; massNeighborKeys: Set<string> }[] {
-  const foundations = grid.map((row) => row.map((c) => c.typeId));
-  const dist = computeBoundaryDistance(foundations, cols, rows);
-  const keys = buildLogoBorderSet(foundations, dist, cols, rows, seed, logoDensity, 0);
-
-  return [...keys].map((key) => {
-    const [col, row] = key.split(',').map(Number);
-    const neighbors = new Set<string>();
-    for (const [dc, dr] of CARDINAL) {
-      const nc = col + dc;
-      const nr = row + dr;
-      if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
-      const ng = foundationGroup(foundations[nr][nc]);
-      const g = foundationGroup(foundations[row][col]);
-      if (ng && g && ng !== g) neighbors.add(cellKey(nc, nr));
-    }
-    return { col, row, massNeighborKeys: neighbors };
-  });
-}

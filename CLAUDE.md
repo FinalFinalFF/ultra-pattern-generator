@@ -9,20 +9,21 @@ npm install
 npm run dev        # vite on :5173
 npm run build      # tsc (typecheck, noEmit) → vite build → dist/
 npm run preview    # serve dist/
+npm run verify     # both headless checks below; exits non-zero on failure
 ```
 
-There is no test framework. Invariants are checked by two headless verification scripts:
+There is no test framework. Invariants are checked by two headless verification scripts, run through `tsx` (a dev dependency):
 
 ```bash
-npx tsx scripts/verify-3d.ts      # SDF ray-hit rates across seeds and all 9 shape kinds
+npx tsx scripts/verify-3d.ts      # SDF ray-hit rates across seeds; every one of the 9 shape kinds must hit
 npx tsx scripts/verify-logos.ts   # logo cells sit on valid type boundaries
 ```
 
-`tsx` is deliberately not a dependency; `node --experimental-strip-types` will **not** work because `src/` modules use extensionless import specifiers that only a bundler-style resolver handles.
+`node --experimental-strip-types` will **not** work in place of `tsx`, because `src/` modules use extensionless import specifiers that only a bundler-style resolver handles.
 
 `tsc` runs with `noUnusedLocals` / `noUnusedParameters`, so an unused variable fails the build. Prefix intentionally-unused params with `_` (see `hasEditableDensity` in `src/cellTypes.ts`).
 
-Deploy is Netlify from `netlify.toml` (`main` → auto build). `scripts/netlify-drop-deploy.mjs` is a separate anonymous "drop" uploader for `dist/` that needs no account.
+Node 22.12+ is required (Vite 8); `.nvmrc` pins 24, which Netlify also reads. Deploy is Netlify from `netlify.toml` (`main` → auto build).
 
 ## Architecture
 
@@ -61,7 +62,7 @@ Density has two distinct meanings (`src/cellTypes.ts`):
 - **Empty** (void) — independent 0–1 share of the field left open. `1` is a fully empty canvas.
 - **Edge** (`BORDER_ZONE_IDS`: outline, crosshatch, logo) — **independent 0–1 probabilities** applied by `accentPlacement.ts` only within `borderDepth` cells of a region boundary. These types are not noise-assigned.
 
-Anything that mutates bulk densities must re-run `normalizeBulkDensities` or `setBulkDensityShare`. `cellTypes.ts` keeps several `@deprecated` aliases (`normalizeWeights`, `weightsToThresholds`, `patchAccentCellTypes`, …) — use the current names in new code.
+Anything that mutates bulk densities must re-run `normalizeBulkDensities` or `setBulkDensityShare`.
 
 ### Colors live on cell types, not in the scheme
 
@@ -83,4 +84,4 @@ Phase is always derived (`getAnimationPhase(time, animation)` = `time * rate`), 
 
 Renders are debounced ~50 ms (`debouncedRender`) and save state as a side effect. `needsGridRegeneration()` decides whether a render reuses the existing grid or regenerates — check it before assuming edits take effect.
 
-The README's "Project structure" list is out of date (it predates ~14 modules including the gradient and color-scheme systems); update it when adding or removing a module.
+The README's "Project structure" list covers every module in `src/`; update it when adding or removing one.

@@ -229,6 +229,3 @@ export function assignShapeTypesNoise(
 
   return typeGrid;
 }
-
-/** @deprecated alias */
-export const assignShapeTypes = assignShapeTypesNoise;
