@@ -83,7 +83,7 @@ Phase is always derived (`getAnimationPhase(time, animation)` = `time * rate`), 
 
 `index.html` contains every control with a hard-coded `id`; `main.ts` reaches them via `getElementById` and helpers (`bindRange`, `syncRange`). Visibility per mode is driven by the CSS classes `.pattern-only-control`, `.shapes3d-only`, `.color-blocks-animation-control`, toggled in `updateModeControls` / `updateAnimationControls`. Adding a control means: markup + id in `index.html`, a bind call in `main.ts`, a field in `AppState`, and a `STATE_VERSION` bump.
 
-Every sidebar `<section>` carries a `data-section` id and a `.section-toggle` button in its title; `initSectionToggles()` folds sections and remembers them in localStorage (`ultraCollapsedSections`), outside `AppState`, so no `STATE_VERSION` bump. Color schemes render in two groups in `initColorSchemeControls()`: fixed two-color schemes as small chips (`#colorSchemeChips`), re-rollable ones as cards (`#colorSchemeGrid`).
+Every sidebar `<section>` carries a `data-section` id and a `.section-toggle` button in its title; `initSectionToggles()` folds sections and remembers them in localStorage (`ultraCollapsedSections`; Cell Types and Animation start folded via `DEFAULT_COLLAPSED_SECTIONS`), outside `AppState`, so no `STATE_VERSION` bump. Color schemes render in two groups in `initColorSchemeControls()`: fixed two-color schemes as small chips (`#colorSchemeChips`), re-rollable ones as cards (`#colorSchemeGrid`).
 
 Renders are debounced ~50 ms (`debouncedRender`) and save state as a side effect. `needsGridRegeneration()` decides whether a render reuses the existing grid or regenerates — check it before assuming edits take effect.
 

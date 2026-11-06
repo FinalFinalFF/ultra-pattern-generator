@@ -35,7 +35,7 @@ before every push.
 - **Export**: SVG, PNG, MP4 (encoded in the browser with WebCodecs), and Copy to Figma (SVG
   with symbols inlined so Figma keeps the colors)
 - **Saved patterns** and all settings persist in the browser's localStorage
-- **Collapsible sidebar**: click any section title to fold it; folded sections are remembered
+- **Collapsible sidebar**: click any section title to fold it; Cell Types and Animation start folded, and your choices are remembered
 
 ## Deploy to Netlify
 

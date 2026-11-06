@@ -387,12 +387,16 @@ function initColorSchemeControls(): void {
 
 const COLLAPSED_SECTIONS_KEY = 'ultraCollapsedSections';
 
+/** Folded until the viewer opens them. */
+const DEFAULT_COLLAPSED_SECTIONS = ['cell-types', 'animation'];
+
 /** Which sidebar sections are folded. A per-viewer convenience, so it lives outside AppState. */
 function loadCollapsedSections(): Set<string> {
   try {
-    return new Set(JSON.parse(localStorage.getItem(COLLAPSED_SECTIONS_KEY) ?? '[]') as string[]);
+    const saved = localStorage.getItem(COLLAPSED_SECTIONS_KEY);
+    return new Set(saved === null ? DEFAULT_COLLAPSED_SECTIONS : (JSON.parse(saved) as string[]));
   } catch {
-    return new Set();
+    return new Set(DEFAULT_COLLAPSED_SECTIONS);
   }
 }
 
