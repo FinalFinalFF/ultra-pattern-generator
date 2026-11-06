@@ -1,3 +1,5 @@
+![Ultra Pattern Generator](docs/banner.png)
+
 # Ultra Pattern Generator
 
 A browser tool for generating Ultra Security grid patterns. It mixes line meshes, dots, hexagons, solid shapes, logo marks, outlines and crosshatch, clustered by noise fields, 3D shapes or gradients. Patterns can be animated and exported as SVG, PNG or MP4, or copied straight into Figma.
