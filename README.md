@@ -1,7 +1,5 @@
 # Ultra Pattern Generator
 
-**Live:** [ultra.fnfn.us](https://ultra.fnfn.us)
-
 A browser tool for generating Ultra Security grid patterns. It mixes line meshes, dots, hexagons, solid shapes, logo marks, outlines and crosshatch, clustered by noise fields, 3D shapes or gradients. Patterns can be animated and exported as SVG, PNG or MP4, or copied straight into Figma.
 
 ## Requirements
@@ -40,17 +38,15 @@ before every push.
 ## Deploy to Netlify
 
 1. In [Netlify](https://app.netlify.com/), choose **Add new site** → **Import from Git**
-2. Select this repository
+2. Push this project to your own Git repository and select it
 3. The build settings come from `netlify.toml` (command `npm run build`, publish directory
    `dist`); the Node version comes from `.nvmrc`
 4. Deploy. Every push to `main` rebuilds automatically
 
 The output is a static site, so any static host works: run `npm run build` and upload `dist/`.
 
-The current deployment is [ultra.fnfn.us](https://ultra.fnfn.us), a CNAME to the Netlify site, set
-to **DNS only** (grey cloud) in Cloudflare so Netlify can provision and renew its own TLS
-certificate. A new owner pointing their own domain at their own Netlify site should follow
-Netlify's custom domain steps instead.
+FinalFinal keeps its own copy at [ultra.fnfn.us](https://ultra.fnfn.us). Your deployment is
+independent of it.
 
 ## Fonts
 
@@ -58,12 +54,9 @@ All fonts are served from `public/fonts/`.
 
 | Font | Used for | License |
 | --- | --- | --- |
-| Aeonik (Light, Regular, Medium) | Wordmark and display text | Commercial (CoType Foundry). Confirm a web license covers your deployment before hosting it |
+| Aeonik (Light, Regular, Medium) | Wordmark and display text | Commercial (CoType Foundry), licensed |
 | Inter | Interface text | SIL Open Font License, `public/fonts/OFL-Inter.txt` |
 | DM Mono | Labels and numbers | SIL Open Font License, `public/fonts/OFL-DM-Mono.txt` |
-
-If Aeonik isn't licensed for your domain, delete the three `Aeonik-*.otf` files and their
-`@font-face` blocks at the top of `src/styles.css`. The display text falls back to Inter.
 
 ## Maintenance notes
 
