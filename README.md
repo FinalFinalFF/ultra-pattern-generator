@@ -50,12 +50,12 @@ independent of it.
 
 ## Fonts
 
-All fonts are served from `public/fonts/`.
+All fonts are served from `public/fonts/` and are open source. Ultra's brand typeface, Aeonik,
+is licensed for the logo mark only, not for web use, so the app doesn't use it.
 
 | Font | Used for | License |
 | --- | --- | --- |
-| Aeonik (Light, Regular, Medium) | Wordmark and display text | Commercial (CoType Foundry), licensed |
-| Inter | Interface text | SIL Open Font License, `public/fonts/OFL-Inter.txt` |
+| Inter (variable, Latin subset) | Wordmark, display and interface text | SIL Open Font License, `public/fonts/OFL-Inter.txt` |
 | DM Mono | Labels and numbers | SIL Open Font License, `public/fonts/OFL-DM-Mono.txt` |
 
 ## Maintenance notes

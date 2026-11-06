@@ -15,33 +15,9 @@
 }
 
 @font-face {
-  font-family: 'Aeonik';
-  src: url('/fonts/Aeonik-Light.otf') format('opentype');
-  font-weight: 300;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Aeonik';
-  src: url('/fonts/Aeonik-Regular.otf') format('opentype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Aeonik';
-  src: url('/fonts/Aeonik-Medium.otf') format('opentype');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
   font-family: 'Inter';
-  src: url('/fonts/Inter-Regular.ttf') format('truetype');
-  font-weight: 400;
+  src: url('/fonts/Inter-Variable-latin.woff2') format('woff2');
+  font-weight: 100 900;
   font-style: normal;
   font-display: swap;
 }
@@ -71,8 +47,8 @@
   --ff-button-border: rgba(34, 34, 34, 0.2);
   --ff-signal: var(--ff-red);
   --ff-signal-hover: var(--ff-ember);
-  --ff-font-display: 'Aeonik', 'Inter', 'Helvetica Neue', system-ui, sans-serif;
-  --ff-font-wordmark: 'Aeonik', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --ff-font-display: 'Inter', 'Helvetica Neue', system-ui, sans-serif;
+  --ff-font-wordmark: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --ff-font-ui: 'Inter', 'Helvetica Neue', system-ui, sans-serif;
   --ff-font-mono: 'DM Mono', 'IBM Plex Mono', ui-monospace, monospace;
   --ff-space-1: 4px;
