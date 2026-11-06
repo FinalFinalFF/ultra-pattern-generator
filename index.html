@@ -53,7 +53,8 @@
           <button type="button" id="modeGradient" class="mode-toggle-btn" data-mode="gradient">Gradient</button>
         </div>
 
-        <section class="section">
+        <section class="section" data-section="grid">
+          <h2 class="section-title"><button type="button" class="section-toggle" aria-expanded="true">Grid</button></h2>
           <div class="section-body">
             <label class="pattern-only-control">
               <span class="range-head">Columns <span id="colsVal" class="range-val">60</span></span>
@@ -70,15 +71,16 @@
           </div>
         </section>
 
-        <section class="section">
-          <h2 class="section-title">Color</h2>
+        <section class="section" data-section="color">
+          <h2 class="section-title"><button type="button" class="section-toggle" aria-expanded="true">Color</button></h2>
           <div class="section-body">
-            <div id="colorSchemeGrid" class="color-scheme-grid" role="group" aria-label="Color scheme"></div>
+            <div id="colorSchemeChips" class="color-scheme-chips" role="group" aria-label="Two-color schemes"></div>
+            <div id="colorSchemeGrid" class="color-scheme-grid" role="group" aria-label="Multicolor schemes"></div>
           </div>
         </section>
 
-        <section class="section shapes3d-only hidden" id="shape3dSection">
-          <h2 class="section-title">3D Shape</h2>
+        <section class="section shapes3d-only hidden" id="shape3dSection" data-section="shape3d">
+          <h2 class="section-title"><button type="button" class="section-toggle" aria-expanded="true">3D Shape</button></h2>
           <div class="section-body">
             <label>Shape
               <select id="shape3dKind">
@@ -121,13 +123,13 @@
           </div>
         </section>
 
-        <section class="section">
-          <h2 class="section-title">Cell Types</h2>
+        <section class="section" data-section="cell-types">
+          <h2 class="section-title"><button type="button" class="section-toggle" aria-expanded="true">Cell Types</button></h2>
           <div class="section-body" id="cellTypePanel"></div>
         </section>
 
-        <section class="section pattern-only-control">
-          <h2 class="section-title">Animation</h2>
+        <section class="section pattern-only-control" data-section="animation">
+          <h2 class="section-title"><button type="button" class="section-toggle" aria-expanded="true">Animation</button></h2>
           <div class="section-body animation-panel">
             <div class="anim-group">
               <label class="toggle-row">
@@ -165,8 +167,8 @@
           </div>
         </section>
 
-        <section class="section">
-          <h2 class="section-title">Export</h2>
+        <section class="section" data-section="export">
+          <h2 class="section-title"><button type="button" class="section-toggle" aria-expanded="true">Export</button></h2>
           <div class="section-body">
             <button type="button" id="copyFigmaBtn">Copy to Figma</button>
             <button type="button" id="downloadSvgBtn">Download SVG</button>

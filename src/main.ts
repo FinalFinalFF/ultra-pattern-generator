@@ -340,14 +340,30 @@ const REROLL_ICON = `<svg class="color-scheme-reroll-icon" viewBox="0 0 16 16" a
 </svg>`;
 
 function initColorSchemeControls(): void {
+  const chips = document.getElementById('colorSchemeChips')!;
   const grid = document.getElementById('colorSchemeGrid')!;
-  grid.innerHTML = COLOR_SCHEMES.map((scheme) => {
-    const rerolls = schemeRerollsOnReselect(scheme.id);
-    const hint = rerolls ? `${scheme.name} — click again to shuffle` : scheme.name;
+  // Fixed two-color schemes are small swatch chips; multicolor and re-rollable schemes keep cards.
+  chips.innerHTML = COLOR_SCHEMES.filter((scheme) => !schemeRerollsOnReselect(scheme.id))
+    .map(
+      (scheme) => `
+      <button
+        type="button"
+        class="color-scheme-chip"
+        data-color-scheme="${scheme.id}"
+        title="${scheme.name}"
+        aria-label="${scheme.name}"
+        aria-pressed="false"
+      >
+        <span class="color-scheme-swatch" style="background:${schemeSwatchStyle(scheme)}"></span>
+      </button>`,
+    )
+    .join('');
+  grid.innerHTML = COLOR_SCHEMES.filter((scheme) => schemeRerollsOnReselect(scheme.id)).map((scheme) => {
+    const hint = `${scheme.name} — click again to shuffle`;
     return `
       <button
         type="button"
-        class="color-scheme-btn${rerolls ? ' is-reroll' : ''}"
+        class="color-scheme-btn is-reroll"
         data-color-scheme="${scheme.id}"
         title="${hint}"
         aria-label="${hint}"
@@ -356,17 +372,56 @@ function initColorSchemeControls(): void {
         <span class="color-scheme-swatch" style="background:${schemeSwatchStyle(scheme)}"></span>
         <span class="color-scheme-meta">
           <span class="color-scheme-label">${scheme.name}</span>
-          ${rerolls ? REROLL_ICON : ''}
+          ${REROLL_ICON}
         </span>
       </button>`;
   }).join('');
 
-  grid.querySelectorAll<HTMLButtonElement>('[data-color-scheme]').forEach((btn) => {
+  document.querySelectorAll<HTMLButtonElement>('[data-color-scheme]').forEach((btn) => {
     btn.addEventListener('click', () => {
       setColorScheme(btn.dataset.colorScheme as ColorSchemeId);
     });
   });
   syncColorSchemeUi();
+}
+
+const COLLAPSED_SECTIONS_KEY = 'ultraCollapsedSections';
+
+/** Which sidebar sections are folded. A per-viewer convenience, so it lives outside AppState. */
+function loadCollapsedSections(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(COLLAPSED_SECTIONS_KEY) ?? '[]') as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+function initSectionToggles(): void {
+  const collapsed = loadCollapsedSections();
+  document.querySelectorAll<HTMLElement>('.sidebar .section[data-section]').forEach((section) => {
+    const id = section.dataset.section!;
+    const toggle = section.querySelector<HTMLButtonElement>('.section-toggle');
+    const body = section.querySelector<HTMLElement>('.section-body');
+    if (!toggle || !body) return;
+    body.id ||= `section-body-${id}`;
+    toggle.setAttribute('aria-controls', body.id);
+    const apply = (isCollapsed: boolean) => {
+      section.classList.toggle('is-collapsed', isCollapsed);
+      toggle.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+    };
+    apply(collapsed.has(id));
+    toggle.addEventListener('click', () => {
+      const next = !section.classList.contains('is-collapsed');
+      apply(next);
+      if (next) collapsed.add(id);
+      else collapsed.delete(id);
+      try {
+        localStorage.setItem(COLLAPSED_SECTIONS_KEY, JSON.stringify([...collapsed]));
+      } catch {
+        // Storage blocked: folding still works for this visit.
+      }
+    });
+  });
 }
 
 function needsGridRegeneration(): boolean {
@@ -578,6 +633,7 @@ function initShape3dControls(): void {
 }
 
 function initControls(): void {
+  initSectionToggles();
   initColorSchemeControls();
 
   document.getElementById('modePattern')!.addEventListener('click', () => setGenerateMode('pattern'));
