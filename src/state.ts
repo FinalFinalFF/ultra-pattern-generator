@@ -84,7 +84,7 @@ export const defaultState: AppState = {
   rows: 34,
   cellSize: 16,
   generateMode: 'pattern',
-  colorSchemeId: 'mono',
+  colorSchemeId: 'color-shapes',
   shapeNoise: { ...defaultShapeNoise },
   shape3d: { ...defaultShape3d },
   animation: {
@@ -93,7 +93,7 @@ export const defaultState: AppState = {
     speed: 0.2,
     animateColorBlocks: false,
   },
-  cellTypes: applyColorScheme(getDefaultCellTypes(), 'mono'),
+  cellTypes: applyColorScheme(getDefaultCellTypes(), 'color-shapes'),
 };
 
 type LegacyCellType = CellTypeDef & { weight?: number };
